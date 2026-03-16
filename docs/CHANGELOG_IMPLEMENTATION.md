@@ -5,6 +5,32 @@
 
 ---
 
+## [2026-03-16] — ADAPTATION setup machine (contraintes mémoire/environnement)
+
+### docker-compose.yml
+
+| Modification | Raison |
+|---|---|
+| Suppression `version: "3.9"` | Obsolète dans Docker Compose v2, génère un warning |
+| Healthcheck MinIO commenté | Image MinIO sans `curl` → healthcheck inutilisable ; `minio-init` passe en `depends_on: - minio` (liste simple) |
+| Healthcheck `airflow-webserver` : `curl` → `python -c urllib.request` | `curl` absent de l'image python:3.11-slim |
+| Healthcheck `backend-api` : `curl` → `python -c urllib.request` | Idem |
+| `backend-api` depends_on minio : `service_healthy` → `service_started` | Healthcheck MinIO désactivé → condition healthy impossible |
+
+### backend/requirements.txt
+
+| Modification | Raison |
+|---|---|
+| `fastapi==0.111.0` → `fastapi-slim==0.111.0` | Version allégée sans dépendances optionnelles bundlées ; API identique |
+| `stdnum==1.20` → `python-stdnum==1.20` | Nom PyPI correct (import Python reste `stdnum`) |
+| Ajout `email-validator==2.3.0` | Requis par `pydantic.EmailStr` utilisé dans `schemas.py` — était manquant |
+| Suppression `uuid==1.30` | Module stdlib Python, paquet PyPI obsolète |
+
+### Impact code
+Aucun changement de code nécessaire — tous les imports restent identiques.
+
+---
+
 ## [2026-03-16] — BUGFIX : Suppression spaCy — Docker build
 
 ### Problème
