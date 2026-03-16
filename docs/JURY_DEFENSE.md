@@ -122,6 +122,116 @@ Ces normalisations augmentent le F1 de ~8 points (mesuré lors de l'ablation).
 
 ---
 
+## Extraction de champs — Regex
+
+### Pourquoi des regex plutôt qu'un LLM pour l'extraction ?
+
+Pour un ensemble de documents **structurés et normalisés** (factures, RIB, Kbis...), les regex offrent :
+- **Latence < 1ms** par document vs 200-2000ms pour un appel API LLM
+- **Déterminisme** : même entrée → même sortie, auditable
+- **Coût zéro** marginal
+- **Précision maximale** sur des patterns formels (IBAN, SIRET) : le format est un standard légal, pas une approximation linguistique
+
+Un LLM serait justifié pour des **contrats libres** ou des **emails** où la structure est imprévisible.
+
+---
+
+### Comment les regex tolèrent-elles le bruit OCR ?
+
+Trois techniques systématiques :
+
+**1. Espaces parasites tolérés** : le SIRET Tesseract peut être retourné "732 829 320 00074" au lieu de "73282932000074".
+
+```python
+_RE_SIRET = re.compile(r'\b(\d{3}[\s.\-]?\d{3}[\s.\-]?\d{3}[\s.\-]?\d{5})\b')
+```
+→ Le `[\s.\-]?` rend chaque séparateur optionnel. Après capture, `_clean_number()` supprime tous les espaces/tirets/points.
+
+**2. Séparateurs décimaux ambigus** : un montant OCR peut être `1 234,56` ou `1234.56` ou `1.234,56`.
+
+```python
+# Format 1.234,56 → 1234.56
+s = s.replace('.', '').replace(',', '.')
+```
+→ `_parse_amount()` distingue virgule décimale vs point de milliers selon la présence simultanée des deux.
+
+**3. Contexte ancré sur mots-clés** : plutôt que de capturer `\d{14}` partout (faux positifs sur numéros de téléphone, codes postaux...), on ancre sur le contexte :
+
+```python
+re.search(r'(?:siret|n[o°]?\s*siret)\s*[:\s]?\s*(\d[\d\s.\-]{12,18}\d)', text, re.IGNORECASE)
+```
+→ On ne capture un SIRET que si précédé du mot "SIRET" ou "N° SIRET". Fallback sur le pattern global si absent.
+
+---
+
+### Quels champs sont extraits par type de document ?
+
+| Champ | Pattern technique | Types concernés |
+|-------|------------------|-----------------|
+| SIRET (14 chiffres) | `\d{3}[\s.\-]?\d{3}[\s.\-]?\d{3}[\s.\-]?\d{5}` + validation longueur | Tous |
+| SIREN (9 chiffres) | Dérivé du SIRET ou `\d{3}[\s.\-]?\d{3}[\s.\-]?\d{3}` | Tous |
+| TVA intracomm. | `FR[\s]?[0-9A-Z]{2}[\s]?\d{3}[\s]?\d{3}[\s]?\d{3}` | FACTURE, DEVIS, KBIS |
+| Montant HT/TTC/TVA | Contexte (`total ht`, `net à payer`...) + `[\d\s]{1,10}[,.]?\d{0,2}` | FACTURE, DEVIS |
+| Taux TVA | `tva\s*(?:à\s*)?(\d{1,2}[,.]?\d?)\s*%` + snap légal (20/10/8.5/5.5/2.1%) | FACTURE, DEVIS |
+| Date émission/échéance/expiration | 4 formats couverts (DD/MM/YYYY, YYYY-MM-DD, "D MOIS YYYY", abbréviations) | Tous |
+| IBAN français | `FR\d{2}[\s]?\d{4}...` + nettoyage espaces | RIB |
+| BIC/SWIFT | Priorité contexte `(?:bic\|swift)\s*:?\s*([A-Z]{4}...)` | RIB |
+| Raison sociale | Suffixes juridiques français (SAS, SARL, EURL, SCI...) bi-directionnel | Tous |
+| Adresse | `\d{1,5}[\s]+(?:rue\|avenue\|boulevard\|...)\s+\d{5}\s+[Ville]` | Tous |
+| N° facture/devis | Contexte `facture\s*n[o°]?\s*:?` + alphanumeric `[A-Z0-9\-_/]{3,25}` | FACTURE, DEVIS |
+
+---
+
+### Comment les montants manquants sont-ils déduits ?
+
+Déduction croisée HT/TVA/TTC quand seulement 2 des 3 sont présents :
+
+```python
+if ht and tva_amount and not ttc:
+    ttc = round(ht + tva_amount, 2)
+elif ht and ttc and not tva_amount:
+    tva_amount = round(ttc - ht, 2)
+elif tva_amount and ttc and not ht:
+    ht = round(ttc - tva_amount, 2)
+```
+
+Pour le taux TVA, si non trouvé dans le texte, on le calcule (`tva/ht × 100`) puis on le "snappe" sur les taux légaux français avec une tolérance ±1% pour les arrondis comptables.
+
+---
+
+### Pourquoi normaliser le texte avant le TF-IDF ?
+
+Sans normalisation, un SIRET différent dans chaque document crée un token unique par document — le TF-IDF lui donne un poids quasi nul (IDF très bas = terme trop rare, ou IDF très haut = terme quasi unique donc non discriminant). Même problème pour les montants et les dates.
+
+Trois normalisations appliquées dans `train.py` et `classifier.py` :
+
+```python
+# SIRET (14 chiffres, espaces tolérés) → token neutre
+text = re.sub(r'\b\d{3}[\s.\-]?\d{3}[\s.\-]?\d{3}[\s.\-]?\d{5}\b', 'num_siret', text)
+
+# Montants (1 234,56 € ou 1234.56 EUR) → token neutre
+text = re.sub(r'\b\d[\d\s]*[,\.]\d{2}\s*(?:€|EUR|euros?)?\b', 'montant_eur', text, flags=re.IGNORECASE)
+
+# Dates (8+ formats) → token neutre
+text = re.sub(r'\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4}\b', 'date_doc', text)
+text = re.sub(r'\b\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}\b', 'date_doc', text)
+```
+
+Ces normalisations ont **augmenté le F1 de ~8 points** lors de l'ablation (mesuré en désactivant chaque normalisation individuellement).
+
+---
+
+### Pourquoi ne pas utiliser spaCy NER pour l'extraction ?
+
+spaCy a été évalué comme complément aux regex. Avantages : extraction d'entités nommées (noms de personnes, organisations) sans pattern rigide. Inconvénients :
+- Le modèle `fr_core_news_md` (~40MB) confond souvent "BTP SOLUTIONS SAS" (raison sociale) avec une entité `GPE` (lieu)
+- Les montants et identifiants légaux (SIRET, IBAN) ne sont pas dans les entités NER standard
+- Latence ~50ms par document vs <1ms pour les regex
+
+Décision : regex pour tous les champs formels, heuristique regex sur suffixes juridiques (`SAS|SARL|EURL|...`) pour la raison sociale. spaCy pourrait être ajouté pour les noms de dirigeants (Kbis) en phase 2.
+
+---
+
 ## Validation & Conformité
 
 ### Comment valide-t-on un SIRET ?
