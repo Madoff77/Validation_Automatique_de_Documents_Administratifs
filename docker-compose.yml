@@ -217,6 +217,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./scripts:/app/scripts
       - model_data:/app/models/trained
     depends_on:
       mongo:

@@ -238,6 +238,18 @@ def extract_text(file_bytes: bytes, mime_type: str) -> OCRResult:
         return _extract_from_pdf(file_bytes)
     elif mime_type in ("image/jpeg", "image/png", "image/tiff", "image/bmp", "image/webp"):
         return _extract_from_image(file_bytes)
+    elif mime_type.startswith("text/"):
+        # Fichier texte brut (seed sans générateur) — pas besoin d'OCR
+        text = file_bytes.decode("utf-8", errors="replace")
+        text = _clean_ocr_text(text)
+        return OCRResult(
+            text=text,
+            confidence=1.0,
+            method="plain_text",
+            ocr_config=None,
+            page_count=1,
+            word_count=len(text.split()),
+        )
     else:
         logger.warning("unknown_mime_type", mime_type=mime_type)
         return _extract_from_image(file_bytes)

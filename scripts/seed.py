@@ -153,10 +153,8 @@ async def seed_documents(db):
         document_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
 
-        existing = await db.documents.find_one({
-            "supplier_id": supplier_id,
-            "doc_type": doc_type,
-        })
+        seed_key = f"{supplier_id}:{label.lower().replace(' ', '_')}"
+        existing = await db.documents.find_one({"seed_key": seed_key})
         if existing:
             print(f"  ↳ {label} déjà présent")
             continue
@@ -202,6 +200,7 @@ async def seed_documents(db):
         doc = {
             "document_id": document_id,
             "supplier_id": supplier_id,
+            "seed_key": seed_key,
             "filename": filename,
             "original_filename": f"{label.lower().replace(' ', '_')}.{ext}",
             "mime_type": mime_type,
