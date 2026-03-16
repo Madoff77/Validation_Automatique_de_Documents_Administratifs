@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle, Filter, RefreshCw, X } from 'lucide-react'
 import { anomaliesApi } from '../api/index'
+import { usePermissions } from '../hooks/usePermissions'
 import { formatDistanceToNow, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -173,6 +174,7 @@ export default function Anomalies() {
 function AnomalyRow({ anomaly, onResolve, resolving }) {
   const [expanded, setExpanded] = useState(false)
   const [notes, setNotes] = useState('')
+  const { canResolveAnomaly } = usePermissions()
 
   return (
     <div className="px-5 py-4">
@@ -200,7 +202,7 @@ function AnomalyRow({ anomaly, onResolve, resolving }) {
             </div>
           )}
         </div>
-        {!anomaly.resolved && (
+        {!anomaly.resolved && canResolveAnomaly && (
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setExpanded(!expanded)}

@@ -5,6 +5,40 @@
 
 ---
 
+## [2026-03-16] — RBAC Frontend : UX adaptée par rôle
+
+### Principe
+Le backend reste la source de vérité sécurité. Le frontend adapte l'UX sans dupliquer la logique.
+
+### Fichiers créés
+- `frontend-crm/src/hooks/usePermissions.js` — hook centralisé (canUpload, canCreateSupplier, canEditSupplier, canReprocess, isAdmin, isViewer)
+- `frontend-compliance/src/hooks/usePermissions.js` — hook centralisé (canResolveAnomaly, isAdmin, isViewer)
+
+### Fichiers modifiés — frontend-crm
+| Fichier | Changement |
+|---|---|
+| `App.jsx` | Ajout `OperatorRoute` — redirige vers dashboard si viewer tente d'accéder à `/upload` |
+| `pages/Suppliers.jsx` | Bouton "Nouveau fournisseur" masqué si `!canCreateSupplier` |
+| `pages/Documents.jsx` | Bouton "Importer" masqué si `!canUpload` |
+| `pages/SupplierDetail.jsx` | Boutons "Modifier", "Auto-remplir", "Ajouter document", "Relancer" masqués selon permissions |
+
+### Fichiers modifiés — frontend-compliance
+| Fichier | Changement |
+|---|---|
+| `pages/Anomalies.jsx` | Bouton "Résoudre" masqué si `!canResolveAnomaly` |
+
+### Matrice des permissions
+| Permission | viewer | operator | admin |
+|---|:---:|:---:|:---:|
+| canUpload | ❌ | ✅ | ✅ |
+| canCreateSupplier | ❌ | ✅ | ✅ |
+| canEditSupplier | ❌ | ✅ | ✅ |
+| canReprocess | ❌ | ✅ | ✅ |
+| canResolveAnomaly | ❌ | ✅ | ✅ |
+| isAdmin | ❌ | ❌ | ✅ |
+
+---
+
 ## [2026-03-16] — ADAPTATION setup machine (contraintes mémoire/environnement)
 
 ### docker-compose.yml

@@ -8,6 +8,7 @@ import {
 import { suppliersApi } from '../api/suppliers'
 import { documentsApi } from '../api/documents'
 import { ComplianceBadge, DocTypeBadge, DocStatusBadge } from '../components/StatusBadge'
+import { usePermissions } from '../hooks/usePermissions'
 import { formatDistanceToNow, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -48,6 +49,7 @@ export default function SupplierDetail() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [autoFilling, setAutoFilling] = useState(false)
+  const { canUpload, canEditSupplier, canReprocess } = usePermissions()
 
   const { data: supplier, isLoading } = useQuery({
     queryKey: ['supplier', id],
@@ -160,24 +162,30 @@ export default function SupplierDetail() {
         <div className="flex items-center gap-2">
           {!editing ? (
             <>
-              <button
-                onClick={handleAutoFill}
-                className="btn-secondary"
-                disabled={autoFilling}
-                title="Remplir automatiquement depuis les documents traités"
-              >
-                {autoFilling
-                  ? <Loader2 size={15} className="animate-spin" />
-                  : <Wand2 size={15} />
-                }
-                Auto-remplir
-              </button>
-              <button onClick={startEdit} className="btn-secondary">
-                <Edit3 size={15} /> Modifier
-              </button>
-              <Link to={`/upload?supplier=${id}`} className="btn-primary">
-                <Upload size={15} /> Ajouter document
-              </Link>
+              {canEditSupplier && (
+                <button
+                  onClick={handleAutoFill}
+                  className="btn-secondary"
+                  disabled={autoFilling}
+                  title="Remplir automatiquement depuis les documents traités"
+                >
+                  {autoFilling
+                    ? <Loader2 size={15} className="animate-spin" />
+                    : <Wand2 size={15} />
+                  }
+                  Auto-remplir
+                </button>
+              )}
+              {canEditSupplier && (
+                <button onClick={startEdit} className="btn-secondary">
+                  <Edit3 size={15} /> Modifier
+                </button>
+              )}
+              {canUpload && (
+                <Link to={`/upload?supplier=${id}`} className="btn-primary">
+                  <Upload size={15} /> Ajouter document
+                </Link>
+              )}
             </>
           ) : (
             <>
@@ -241,17 +249,21 @@ export default function SupplierDetail() {
           <div className="card">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">Documents</h2>
-              <Link to={`/upload?supplier=${id}`} className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-                + Ajouter
-              </Link>
+              {canUpload && (
+                <Link to={`/upload?supplier=${id}`} className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                  + Ajouter
+                </Link>
+              )}
             </div>
             {docs.length === 0 ? (
               <div className="px-6 py-12 text-center">
                 <FileText size={36} className="mx-auto text-gray-300 mb-3" />
                 <p className="text-sm text-gray-400">Aucun document importé</p>
-                <Link to={`/upload?supplier=${id}`} className="btn-primary mt-4 inline-flex">
-                  <Upload size={14} /> Importer
-                </Link>
+                {canUpload && (
+                  <Link to={`/upload?supplier=${id}`} className="btn-primary mt-4 inline-flex">
+                    <Upload size={14} /> Importer
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
@@ -269,7 +281,7 @@ export default function SupplierDetail() {
                     <span className="text-xs text-gray-400 whitespace-nowrap hidden lg:block">
                       {format(new Date(doc.upload_timestamp), 'dd/MM/yyyy')}
                     </span>
-                    {doc.status === 'error' && (
+                    {doc.status === 'error' && canReprocess && (
                       <button
                         onClick={() => reprocessMutation.mutate(doc.document_id)}
                         className="text-gray-400 hover:text-primary-600 transition-colors"
@@ -318,7 +330,7 @@ export default function SupplierDetail() {
                 {supplier.tva_number && <ExtractedChip label="TVA" value={supplier.tva_number} />}
                 {supplier.email && <ExtractedChip label="Email" value={supplier.email} />}
               </div>
-              {!supplier.siret && !supplier.tva_number && (
+              {!supplier.siret && !supplier.tva_number && canEditSupplier && (
                 <button onClick={handleAutoFill} className="btn-secondary w-full justify-center text-xs mt-2">
                   <Wand2 size={12} /> Remplir depuis les documents
                 </button>
