@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-03-16] — BUGFIX : Suppression spaCy — Docker build
+
+### Problème
+- `python -m spacy download fr_core_news_md` échoue au build Docker (URL GitHub mal formée par spaCy)
+- spaCy était utilisé **uniquement** comme fallback de dernier recours pour extraire la `raison_sociale`, après la regex heuristique sur suffixes juridiques (SAS, SARL, EURL, etc.)
+
+### Décision : suppression de spaCy
+- La regex heuristique (`_RE_RAISON_SOCIALE`) couvre tous les cas du projet
+- spaCy n'apportait de valeur que si la regex échouait (cas rarissime sur documents FR structurés)
+- Gain : image Docker ~500 Mo plus légère, build reproductible
+
+### Fichiers modifiés
+- `backend/requirements.txt` : suppression de `spacy==3.7.4`
+- `backend/Dockerfile` : suppression de `RUN python -m spacy download fr_core_news_md`
+- `backend/pipeline/extraction/field_extractor.py` : suppression de `_extract_raison_sociale_spacy`, `_get_spacy_model` ; `_extract_raison_sociale` utilise uniquement l'heuristique regex
+
+### Impact
+- Aucune régression : l'heuristique regex était prioritaire et couvre tous les documents de démo
+- Build Docker stable et reproductible
+
+---
+
 ## [2026-03-16] — PHASE 1 : Cadrage & Architecture
 
 ### Initialisation projet

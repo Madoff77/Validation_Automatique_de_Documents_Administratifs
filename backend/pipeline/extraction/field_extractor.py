@@ -368,43 +368,9 @@ def _extract_raison_sociale_heuristic(text: str) -> Optional[str]:
     return None
 
 
-def _extract_raison_sociale_spacy(text: str) -> Optional[str]:
-    """Utiliser spaCy NER pour extraire le nom d'entreprise (ORG)."""
-    try:
-        import spacy
-        nlp = _get_spacy_model()
-        if nlp is None:
-            return None
-        # Limiter à 2000 chars pour performance
-        doc = nlp(text[:2000])
-        org_entities = [ent.text.strip() for ent in doc.ents if ent.label_ == "ORG"]
-        if org_entities:
-            # Prendre l'entité ORG la plus longue (heuristique : plus complet)
-            return max(org_entities, key=len)
-    except Exception as e:
-        logger.debug("spacy_extraction_failed", error=str(e))
-    return None
-
-
-_spacy_model = None
-
-def _get_spacy_model():
-    global _spacy_model
-    if _spacy_model is None:
-        try:
-            import spacy
-            _spacy_model = spacy.load("fr_core_news_md")
-        except Exception as e:
-            logger.warning("spacy_model_load_failed", error=str(e))
-    return _spacy_model
-
-
 def _extract_raison_sociale(text: str) -> Optional[str]:
-    """Combiner heuristique + spaCy, préférer le résultat heuristique si disponible."""
-    heuristic = _extract_raison_sociale_heuristic(text)
-    if heuristic:
-        return heuristic
-    return _extract_raison_sociale_spacy(text)
+    """Extraction par heuristique regex sur suffixes juridiques français."""
+    return _extract_raison_sociale_heuristic(text)
 
 
 def _extract_adresse(text: str) -> Optional[str]:

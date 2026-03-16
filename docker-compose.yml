@@ -111,11 +111,11 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 5
     networks:
       - docnet
 
@@ -124,7 +124,7 @@ services:
     container_name: docplatform-minio-init
     depends_on:
       minio:
-        condition: service_healthy
+        # condition: service_healthy
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};

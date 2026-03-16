@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-fra \
     tesseract-ocr-eng \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
@@ -20,9 +20,6 @@ WORKDIR /app
 # Installer dépendances Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Télécharger modèle spaCy français
-RUN python -m spacy download fr_core_news_md
 
 # Copier le code
 COPY . .
