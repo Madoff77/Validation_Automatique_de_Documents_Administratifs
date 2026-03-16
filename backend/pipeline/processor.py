@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from storage.mongo_client import get_client
+from storage.mongo_client import get_sync_client
 from storage.minio_client import (
     download_file,
     upload_file,
@@ -43,7 +43,7 @@ def _get_classifier() -> DocumentClassifier:
 
 
 def _get_db():
-    client = get_client()
+    client = get_sync_client()
     return client[settings.mongo_db]
 
 

@@ -1,10 +1,12 @@
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo import MongoClient
 from api.config import settings
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 _client: AsyncIOMotorClient = None
+_sync_client: MongoClient = None
 
 
 def get_client() -> AsyncIOMotorClient:
@@ -12,6 +14,14 @@ def get_client() -> AsyncIOMotorClient:
     if _client is None:
         _client = AsyncIOMotorClient(settings.mongo_uri)
     return _client
+
+
+def get_sync_client() -> MongoClient:
+    """Client MongoDB synchrone (PyMongo) — à utiliser dans du code non-async (processor, Airflow)."""
+    global _sync_client
+    if _sync_client is None:
+        _sync_client = MongoClient(settings.mongo_uri)
+    return _sync_client
 
 
 async def get_db() -> AsyncIOMotorDatabase:

@@ -72,6 +72,31 @@
 - **Raison** : Regex rapide + précis sur champs structurés (SIRET, TVA, montants)
 - **Impact** : Extraction robuste sur textes OCR imparfaits (patterns tolérants)
 
+---
+
+## [2026-03-16] — BUGFIX : Pipeline seed — `_asyncio.Future` not subscriptable
+
+### Cause racine
+- `processor.py` contient du code **synchrone** (`def task_ocr`, `def run_full_pipeline`, etc.)
+- Mais `_get_db()` utilisait `get_client()` qui retourne un `AsyncIOMotorClient` (Motor async)
+- Chaque appel `db.documents.find_one(...)` sans `await` retourne une **coroutine** (`_asyncio.Future`) au lieu du document
+- Le premier accès `doc["minio_raw_path"]` plantait avec `'_asyncio.Future' object is not subscriptable`
+
+### Correction
+- **`backend/storage/mongo_client.py`** : Ajout de `get_sync_client()` retournant un `pymongo.MongoClient` synchrone
+- **`backend/pipeline/processor.py`** : `_get_db()` utilise désormais `get_sync_client()` au lieu de `get_client()`
+
+### Fichiers modifiés
+- `backend/storage/mongo_client.py`
+- `backend/pipeline/processor.py`
+
+### Impact
+- Le pipeline `run_full_pipeline()` fonctionne correctement en mode synchrone (seed, Airflow)
+- Le client async Motor reste utilisé par l'API FastAPI (routes async)
+- Aucune régression sur le reste du code
+
+---
+
 ### Moteur de Validation
 - **Modification** : 6 règles de validation inter-documents avec scoring criticité
 - **Fichiers** : `backend/pipeline/validation/validator.py`
