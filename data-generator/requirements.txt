@@ -1,0 +1,8 @@
+Faker==24.11.0
+fpdf2==2.7.9
+Pillow==10.3.0
+opencv-python-headless==4.9.0.80
+numpy==1.26.4
+scikit-learn==1.4.2
+joblib==1.4.0
+python-dateutil==2.9.0
