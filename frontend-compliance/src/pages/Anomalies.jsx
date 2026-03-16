@@ -10,9 +10,8 @@ import clsx from 'clsx'
 
 const SEVERITY_OPTIONS = ['', 'error', 'warning', 'info']
 const TYPE_OPTIONS = [
-  '', 'siret_invalid', 'tva_invalid', 'iban_invalid', 'tva_incoherence',
-  'document_expired', 'document_expiring', 'kbis_too_old', 'siret_mismatch',
-  'low_ocr_confidence', 'extraction_failed', 'classification_failed',
+  '', 'SIRET_MISMATCH', 'DATE_EXPIRED', 'TVA_INCOHERENCE',
+  'MISSING_FIELD', 'FORMAT_ERROR', 'KBIS_EXPIRED', 'URSSAF_EXPIRED',
 ]
 
 function SeverityBadge({ severity }) {
@@ -48,7 +47,7 @@ export default function Anomalies() {
   })
 
   const resolveMutation = useMutation({
-    mutationFn: ({ id, notes }) => anomaliesApi.resolve(id, notes),
+    mutationFn: ({ id }) => anomaliesApi.resolve(id, true),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['anomalies'] })
       qc.invalidateQueries({ queryKey: ['stats'] })
@@ -158,7 +157,7 @@ export default function Anomalies() {
                   <AnomalyRow
                     key={anomaly.anomaly_id}
                     anomaly={anomaly}
-                    onResolve={(notes) => resolveMutation.mutate({ id: anomaly.anomaly_id, notes })}
+                    onResolve={() => resolveMutation.mutate({ id: anomaly.anomaly_id })}
                     resolving={resolveMutation.isPending}
                   />
                 ))}
@@ -173,7 +172,6 @@ export default function Anomalies() {
 
 function AnomalyRow({ anomaly, onResolve, resolving }) {
   const [expanded, setExpanded] = useState(false)
-  const [notes, setNotes] = useState('')
   const { canResolveAnomaly } = usePermissions()
 
   return (
@@ -216,18 +214,18 @@ function AnomalyRow({ anomaly, onResolve, resolving }) {
 
       {expanded && (
         <div className="mt-3 flex gap-2">
-          <input
-            className="input flex-1 py-1.5 text-sm"
-            placeholder="Notes de résolution (optionnel)…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
           <button
-            onClick={() => { onResolve(notes); setExpanded(false) }}
+            onClick={() => { onResolve(); setExpanded(false) }}
             disabled={resolving}
             className="btn-primary py-1.5 px-3 text-sm"
           >
-            Confirmer
+            Confirmer la résolution
+          </button>
+          <button
+            onClick={() => setExpanded(false)}
+            className="btn-secondary py-1.5 px-3 text-sm"
+          >
+            Annuler
           </button>
         </div>
       )}

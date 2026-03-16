@@ -8,7 +8,7 @@ import io
 from api.models.schemas import (
     DocumentResponse, DocumentListItem, DocumentStatus, PipelineTriggerResponse
 )
-from api.dependencies import get_current_user, require_operator, require_viewer
+from api.dependencies import get_current_user, require_admin, require_operator, require_viewer
 from storage.mongo_client import get_db
 from storage.minio_client import get_minio, upload_file, get_presigned_url
 from api.config import settings
@@ -195,7 +195,7 @@ async def download_document(
 @router.delete("/{document_id}", status_code=204)
 async def delete_document(
     document_id: str,
-    current_user: dict = Depends(require_operator),
+    current_user: dict = Depends(require_admin),
     db = Depends(get_db),
 ):
     result = await db.documents.delete_one({"document_id": document_id})

@@ -26,6 +26,7 @@ pdfplumber==0.11.0
 pypdf==4.2.0
 numpy==1.26.4
 scikit-image==0.23.2
+fpdf2==2.7.9
 
 # ── ML / Classification ────────────────────────────────────────
 scikit-learn==1.4.2

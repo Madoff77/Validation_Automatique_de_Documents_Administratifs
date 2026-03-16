@@ -218,6 +218,7 @@ services:
     volumes:
       - ./backend:/app
       - ./scripts:/app/scripts
+      - ./data-generator:/app/data-generator
       - model_data:/app/models/trained
     depends_on:
       mongo:

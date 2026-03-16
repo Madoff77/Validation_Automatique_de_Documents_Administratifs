@@ -120,8 +120,9 @@ async def seed_documents(db):
     print("\n── Documents de démonstration ────────────────")
 
     # Importer le générateur
+    # Chemins possibles selon l'environnement (Docker: /app/data-generator, local: ../data-generator)
     try:
-        sys.path.insert(0, "/app/../data-generator")
+        sys.path.insert(0, "/app/data-generator")
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../data-generator"))
         from generator import generate_text, _text_to_pdf, text_to_image, degrade_image
         import cv2
@@ -166,16 +167,20 @@ async def seed_documents(db):
             mime_type = "application/pdf"
             ext = "pdf"
 
-            # Essayer PDF
-            pdf_bytes = _text_to_pdf(text, title=f"{doc_type} — {label}")
-            if pdf_bytes:
-                file_bytes = pdf_bytes
-            else:
-                # Fallback image
-                img = text_to_image(text)
-                img_degraded = degrade_image(img, degradation, severity)
+            # 30% PDF natif (facture numérique) / 70% image dégradée (scan/photo)
+            import random as _rnd
+            use_pdf = _rnd.random() < 0.30
+            if use_pdf:
+                pdf_bytes = _text_to_pdf(text, title=f"{doc_type} - {label}")
+                if pdf_bytes:
+                    file_bytes = pdf_bytes
+
+            if not file_bytes:
+                # Image avec dégradation (blur, noise, combined, rotation, high_quality...)
                 import io
                 from PIL import Image as PILImage
+                img = text_to_image(text)
+                img_degraded = degrade_image(img, degradation, severity)
                 pil_img = PILImage.fromarray(cv2.cvtColor(img_degraded, cv2.COLOR_BGR2RGB))
                 buf = io.BytesIO()
                 pil_img.save(buf, format="JPEG", quality=70)

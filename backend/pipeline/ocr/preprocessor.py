@@ -130,9 +130,10 @@ def _estimate_skew(gray: np.ndarray) -> float:
                 continue
             rect = cv2.minAreaRect(cnt)
             angle = rect[-1]
-            # cv2.minAreaRect retourne des angles entre -90 et 0
-            if angle < -45:
-                angle += 90
+            # OpenCV 4.5+ retourne des angles dans [0, 90°] (convention inversée)
+            # Texte horizontal → ~90° ; on ramène en [-45°, 45°] convention "skew"
+            if angle > 45:
+                angle -= 90
             angles.append(angle)
 
         if not angles:

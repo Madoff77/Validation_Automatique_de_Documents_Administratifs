@@ -140,9 +140,9 @@ docker compose up -d postgres airflow-init airflow-webserver airflow-scheduler
 ```bash
 docker compose ps
 
-# Tester le backend
-curl http://localhost:8000/health
-# Réponse attendue : {"status":"ok"}
+# Tester le backend (PowerShell)
+Invoke-RestMethod http://localhost:8000/health
+# Réponse attendue : status ok
 ```
 
 ---
@@ -160,13 +160,18 @@ docker compose exec backend-api python /app/scripts/seed.py
 Cette commande crée :
 - **3 utilisateurs** : admin, operator, viewer (avec rôles distincts)
 - **3 fournisseurs** : BTP SOLUTIONS SAS, TECHNO SERVICES EURL, CONSEIL & CO SARL
-- **11 documents** traités avec le pipeline complet, incluant des anomalies intentionnelles :
-  - SIRET invalide
-  - Document expiré (URSSAF)
-  - Kbis trop ancien (> 90 jours)
-  - Incohérence inter-documents
+- **11 documents** générés via `data-generator/` et traités avec le pipeline complet :
+  - Contenu réaliste : SIRET Luhn-valide, montants cohérents, dates, IBAN MOD-97
+  - Format **PDF** (via fpdf2) ou **image JPG dégradée** (flou, bruit, rotation, basse résolution) selon le scénario
+  - Anomalies intentionnelles :
+    - SIRET invalide (attestation SIRET TECHNO SERVICES)
+    - Document expiré (URSSAF BTP)
+    - Kbis trop ancien (> 90 jours — CONSEIL & CO)
+    - Scan fortement dégradé (combined sévérité 0.8 — Facture Conseil)
 
 > Le seed est idempotent : relancer `make seed` ne crée pas de doublons.
+
+> **Prérequis** : le dossier `data-generator/` est monté dans le container via le volume Docker (voir `docker-compose.yml`). `fpdf2` doit être installé dans l'image (`requirements.txt`).
 
 ---
 
@@ -177,11 +182,13 @@ make train
 ```
 
 Cette commande :
-1. Génère des documents synthétiques (par type : FACTURE, DEVIS, KBIS, URSSAF, SIRET, RIB)
-2. Entraîne le **TF-IDF + RandomForest** avec validation croisée
-3. Sauvegarde `classifier.joblib` et `vectorizer.joblib`
+1. Génère des documents synthétiques réalistes via `data-generator/generator.py` (150 exemples × 6 classes)
+2. Entraîne le **TF-IDF (1-2 grams, 8000 features) + RandomForest (200 arbres)** avec validation croisée 5 folds
+3. Sauvegarde `classifier.joblib` et `vectorizer.joblib` dans `/app/models/trained/`
 
 > Si cette étape est sautée, le système utilise automatiquement le **classifieur par mots-clés** (fallback), fonctionnel mais moins précis.
+
+> **Prérequis** : le volume `data-generator/` doit être monté (`/app/data-generator` dans le container). Sans ce volume, `make train` bascule sur un générateur inline simplifié qui produit des données trop homogènes (accuracy 100% non représentative).
 
 ---
 
@@ -244,7 +251,7 @@ Cette commande :
 1. Ouvrir **http://localhost:5174**
 2. Se connecter avec `admin` / `admin123`
 3. **Tableau de bord** : vue globale avec graphique de répartition et anomalies récentes
-4. **Anomalies** : liste filtrée par sévérité/type, résolution inline avec notes
+4. **Anomalies** : liste filtrée par sévérité/type, résolution inline (operator+)
 5. **Expirations** : documents expirant dans les 30 jours, triés par urgence
 6. **Fournisseurs** : statut de conformité par fournisseur, clic pour le détail
 
@@ -442,7 +449,8 @@ S19_Hackathton/
 │   └── requirements.txt
 │
 ├── data-generator/
-│   └── generator.py                # Générateur docs synthétiques (optionnel)
+│   └── generator.py                # Générateur docs synthétiques (PDF, images dégradées)
+│                                   # Monté dans le container : /app/data-generator
 │
 ├── frontend-crm/                   # Interface opérateurs (React + Vite)
 │   ├── src/
@@ -535,7 +543,7 @@ GET    /suppliers/{id}/compliance  Statut conformité détaillé
 
 ```
 GET    /anomalies               ?severity=&type=&resolved=&supplier_id=&limit=
-PATCH  /anomalies/{id}/resolve  { resolution_notes }  [operator+]
+PATCH  /anomalies/{id}/resolve  { resolved: true/false }  [operator+]
 GET    /anomalies/expiring-soon Documents expirant dans les 30 prochains jours
 ```
 
@@ -565,10 +573,31 @@ docker compose logs backend-api
 
 ```bash
 # Vérifier que le backend est bien démarré
-curl http://localhost:8000/health
+powershell -Command "Invoke-RestMethod http://localhost:8000/health"
 
-# Relancer directement
-docker compose exec backend-api python /app/scripts/seed.py
+# Relancer directement (Windows Git Bash — utiliser sh -c pour éviter la conversion de chemin)
+docker compose exec backend-api sh -c "python /app/scripts/seed.py"
+```
+
+### Le seed génère des `.txt` vides au lieu de PDF/images
+
+Symptôme : tous les documents ont le statut `processed` mais toutes les anomalies sont `MISSING_FIELD`.
+
+Cause : le dossier `data-generator/` n'est pas accessible dans le container, ou `fpdf2` n'est pas installé.
+
+```bash
+# Vérifier que le volume est bien monté
+docker compose exec backend-api ls /app/data-generator/
+
+# Vérifier que fpdf2 est installé
+docker compose exec backend-api python -c "from fpdf import FPDF; print('fpdf2 OK')"
+
+# Si manquant → rebuilder l'image
+docker compose build backend-api
+docker compose up -d backend-api
+
+# Puis réinitialiser et re-seeder
+make clean && make up && make seed
 ```
 
 ### Le pipeline reste en `processing`
@@ -600,6 +629,23 @@ make train
 docker compose exec backend-api ls /app/models/trained/
 ```
 
+### `make train` utilise le générateur inline au lieu du générateur externe
+
+Symptôme : message `[WARN] Générateur externe non disponible, génération inline...` — le modèle s'entraîne sur des données trop simplifiées (accuracy 100% artificielle).
+
+Cause : `data-generator/` n'est pas monté dans le container (volume manquant dans `docker-compose.yml`).
+
+```bash
+# Vérifier que le volume est bien monté
+docker compose exec backend-api sh -c "ls /app/data-generator/"
+# Doit afficher : generator.py  requirements.txt  templates
+
+# Si manquant → rebuilder avec le volume correctement déclaré
+docker compose build backend-api
+docker compose up -d backend-api
+make train
+```
+
 ### Réinitialiser complètement
 
 ```bash
@@ -620,6 +666,7 @@ make train      # Réentraîne le modèle
 | **Base de données** | MongoDB 7 (Motor async + PyMongo sync), Mongo Express |
 | **Stockage** | MinIO S3-compatible, 3 buckets (raw/clean/curated) |
 | **OCR** | OpenCV 4, Tesseract 5 (fr+eng), pdfplumber, pdf2image |
+| **Génération documents** | fpdf2 (PDF), Pillow + OpenCV (images dégradées), Faker (données réalistes) |
 | **ML** | scikit-learn (TF-IDF + RandomForest), fallback keyword rules |
 | **Orchestration** | Apache Airflow 2.8 (LocalExecutor, REST API trigger) |
 | **Frontends** | React 18, Vite 5, Tailwind CSS 3, TanStack Query v5 |

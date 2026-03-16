@@ -38,7 +38,8 @@ import joblib
 
 # Ajouter les chemins nécessaires
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../backend"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../data-generator"))
+sys.path.insert(0, "/app/data-generator")  # Absolu (Docker)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../data-generator"))  # Relatif (local)
 
 from pipeline.classification.classifier import DocumentClassifier, DOC_TYPES
 
