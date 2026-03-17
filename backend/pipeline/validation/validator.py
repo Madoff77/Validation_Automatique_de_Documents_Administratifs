@@ -305,82 +305,132 @@ def validate_siret_consistency(
 # ─────────────────────────────────────────────────────────────
 
 def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], List[dict]]:
-    """Retourne (checks, anomalies)."""
+    """
+    Validation d'une facture.
+
+    Philosophie : pas de législation imposant un format strict de facture
+    entre professionnels en France (art. L441-9 CGI liste les mentions
+    obligatoires mais l'absence d'un champ n'est pas un motif de rejet
+    d'un point de vue compliance fournisseur).
+
+    Règles appliquées :
+    - SIRET : vérifié UNIQUEMENT s'il a été extrait par OCR. Absent = pas de check
+      (l'OCR ne l'a pas trouvé, ce n'est pas un défaut du document).
+    - Cohérence TVA (HT + TVA = TTC) : vérifiée si au moins TTC extrait.
+      Incohérence avérée = anomalie warning.
+    - Champs financiers manquants : INFO seulement, pas d'anomalie
+      (c'est une limite OCR, non un problème de conformité).
+    - SIRET inter-docs : si SIRET extrait, vérifier cohérence avec autres docs
+      du même fournisseur (incohérence = anomalie error).
+    """
     checks = []
     anomalies = []
     extracted = doc.get("extracted", {})
     sid = doc["supplier_id"]
     did = doc["document_id"]
 
-    # 1. Format SIRET
+    # 1. SIRET — seulement si extrait par OCR
     siret = extracted.get("siret")
-    valid_siret, msg_siret = validate_siret_format(siret)
-    checks.append(_check("siret_format", valid_siret, "SIRET valide", msg_siret,
-                          severity="warning", details={"siret": siret}))
-    if not valid_siret and siret:
-        anomalies.append(_make_anomaly(sid, did, "FORMAT_ERROR", "warning",
-                                        f"Facture {doc['original_filename']} : {msg_siret}",
-                                        {"siret": siret}))
+    if siret:
+        valid_siret, msg_siret = validate_siret_format(siret)
+        checks.append(_check("siret_format", valid_siret, "SIRET valide", msg_siret,
+                              severity="warning", details={"siret": siret}))
+        if not valid_siret:
+            anomalies.append(_make_anomaly(sid, did, "FORMAT_ERROR", "warning",
+                                            f"Facture {doc['original_filename']} : {msg_siret}",
+                                            {"siret": siret}))
 
-    # 2. Cohérence TVA
+    # 2. Cohérence TVA — seulement si des montants ont été extraits
     ht = extracted.get("montant_ht")
     tva = extracted.get("montant_tva")
     ttc = extracted.get("montant_ttc")
     taux = extracted.get("taux_tva")
-    tva_ok, tva_msg, tva_details = validate_tva_coherence(ht, tva, ttc, taux)
-    checks.append(_check("tva_coherence", tva_ok, "Cohérence TVA OK", tva_msg,
-                          severity="warning", details=tva_details))
-    if not tva_ok:
-        anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
+    if any(v is not None for v in [ht, tva, ttc]):
+        tva_ok, tva_msg, tva_details = validate_tva_coherence(ht, tva, ttc, taux)
+        checks.append(_check("tva_coherence", tva_ok, "Cohérence TVA OK", tva_msg,
+                              severity="warning", details=tva_details))
+        if not tva_ok:
+            anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
 
-    # 3. Champs obligatoires
-    for field_name, label in [("montant_ttc", "Montant TTC"), ("date_emission", "Date d'émission")]:
+    # 3. Présence des champs financiels clés — INFO uniquement, pas d'anomalie
+    #    (champ non extrait = limite OCR, pas un défaut du document)
+    for field_name, label in [
+        ("montant_ttc",   "Montant TTC"),
+        ("montant_ht",    "Montant HT"),
+        ("raison_sociale","Raison sociale vendeur"),
+    ]:
         present = extracted.get(field_name) is not None
-        checks.append(_check(f"field_{field_name}", present,
-                              f"{label} présent", f"{label} manquant",
-                              severity="warning", details={"field": field_name}))
-        if not present:
-            anomalies.append(_make_anomaly(sid, did, "MISSING_FIELD", "warning",
-                                            f"Facture {doc['original_filename']} : {label} manquant",
-                                            {"field": field_name}))
+        checks.append({
+            "rule": f"field_{field_name}",
+            "status": "ok" if present else "info",
+            "message": f"{label} extrait" if present else f"{label} non extrait par OCR",
+            "details": {"field": field_name},
+        })
 
-    # 4. Cohérence SIRET inter-docs
-    for ok, msg, details in validate_siret_consistency(doc, sibling_docs):
-        checks.append(_check("siret_consistency", ok, "SIRET cohérent", msg,
-                              severity="error", details=details))
-        if not ok:
-            anomalies.append(_make_anomaly(
-                sid, did, "SIRET_MISMATCH", "error", msg, details,
-                related_document_id=details.get("sibling_document_id"),
-            ))
+    # 4. Cohérence SIRET inter-docs — seulement si SIRET présent
+    if siret:
+        for ok, msg, details in validate_siret_consistency(doc, sibling_docs):
+            checks.append(_check("siret_consistency", ok, "SIRET cohérent entre documents", msg,
+                                  severity="error", details=details))
+            if not ok:
+                anomalies.append(_make_anomaly(
+                    sid, did, "SIRET_MISMATCH", "error", msg, details,
+                    related_document_id=details.get("sibling_document_id"),
+                ))
 
     return checks, anomalies
 
 
 def _validate_devis(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], List[dict]]:
+    """
+    Validation d'un devis.
+
+    Philosophie : le devis est un document commercial, pas un document de
+    conformité légale. On vérifie la cohérence financière si les montants
+    sont disponibles, et la validité temporelle.
+    Aucune exigence de SIRET (non obligatoire sur un devis).
+    """
     checks = []
     anomalies = []
     extracted = doc.get("extracted", {})
     sid = doc["supplier_id"]
     did = doc["document_id"]
 
-    # Cohérence TVA
+    # 1. Cohérence TVA — seulement si des montants ont été extraits
     ht = extracted.get("montant_ht")
     tva = extracted.get("montant_tva")
     ttc = extracted.get("montant_ttc")
     taux = extracted.get("taux_tva")
-    tva_ok, tva_msg, tva_details = validate_tva_coherence(ht, tva, ttc, taux)
-    checks.append(_check("tva_coherence", tva_ok, "Cohérence TVA OK", tva_msg,
-                          severity="warning", details=tva_details))
-    if not tva_ok:
-        anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
+    if any(v is not None for v in [ht, tva, ttc]):
+        tva_ok, tva_msg, tva_details = validate_tva_coherence(ht, tva, ttc, taux)
+        checks.append(_check("tva_coherence", tva_ok, "Cohérence TVA OK", tva_msg,
+                              severity="warning", details=tva_details))
+        if not tva_ok:
+            anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
 
-    # Date d'expiration du devis
+    # 2. Présence des champs clés — INFO uniquement
+    for field_name, label in [
+        ("montant_ttc",   "Montant TTC"),
+        ("raison_sociale","Raison sociale émetteur"),
+        ("date_expiration","Date de validité du devis"),
+    ]:
+        present = extracted.get(field_name) is not None
+        checks.append({
+            "rule": f"field_{field_name}",
+            "status": "ok" if present else "info",
+            "message": f"{label} extrait" if present else f"{label} non extrait par OCR",
+            "details": {"field": field_name},
+        })
+
+    # 3. Date d'expiration — warning si devis expiré (anomalie commerciale)
     exp_date = extracted.get("date_expiration")
-    status, msg, atype = validate_expiration(exp_date, "DEVIS")
-    checks.append({"rule": "devis_expiration", "status": status, "message": msg, "details": {}})
-    if status == "error" and atype:
-        anomalies.append(_make_anomaly(sid, did, atype, "warning", msg, {"date_expiration": exp_date}))
+    if exp_date:
+        status, msg, atype = validate_expiration(exp_date, "DEVIS")
+        checks.append({"rule": "devis_expiration", "status": status, "message": msg,
+                        "details": {"date_expiration": exp_date}})
+        if status == "error" and atype:
+            anomalies.append(_make_anomaly(sid, did, atype, "warning", msg,
+                                            {"date_expiration": exp_date}))
 
     return checks, anomalies
 
@@ -572,8 +622,8 @@ def validate_document(
         checks = []
         anomalies = []
 
-    # Calcul statut global
-    statuses = [c.get("status", "ok") for c in checks]
+    # Calcul statut global — "info" est informatif, n'impacte pas le statut
+    statuses = [c.get("status", "ok") for c in checks if c.get("status") not in ("ok", "info")]
     if "error" in statuses:
         global_status = "error"
     elif "warning" in statuses:

@@ -5,6 +5,75 @@
 
 ---
 
+## [2026-03-17] — Validation métier FACTURE/DEVIS : philosophie révisée + robustesse ML
+
+### Validation — Philosophie par type de document
+
+**Problème** : le validateur appliquait les mêmes exigences strictes à tous les types de documents. Une FACTURE dont l'OCR n'avait pas extrait le SIRET générait une anomalie "SIRET absent" dans le dashboard compliance — ce qui est incorrect : l'absence d'un champ extrait est une limite OCR, pas un défaut de conformité du document.
+
+**Règle métier appliquée** :
+- **FACTURE / DEVIS** : pas de législation imposant un contrôle de conformité strict entre professionnels. L'article L441-9 CGI liste les mentions légales mais leur absence n'est pas un motif de rejet dans notre contexte. On vérifie uniquement ce qu'on a extrait.
+- **URSSAF / KBIS / SIRET** : documents de conformité légale — SIRET obligatoire, dates d'expiration critiques → validation stricte maintenue.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `backend/pipeline/validation/validator.py` | `_validate_facture` et `_validate_devis` réécrits |
+
+**Détail des changements `_validate_facture`** :
+
+| Règle | Avant | Après |
+|---|---|---|
+| SIRET absent | Check "warning" + anomalie | Aucun check (non extrait par OCR = normal) |
+| SIRET présent invalide | Warning + anomalie | Warning + anomalie ✅ conservé |
+| Montant TTC/HT manquant | Warning + anomalie | INFO uniquement, zéro anomalie |
+| Raison sociale | Non vérifiée | INFO (présent/absent) |
+| TVA cohérence | Toujours calculée | Calculée seulement si montants présents |
+| SIRET inter-docs | Toujours vérifié | Seulement si SIRET extrait |
+
+**Détail des changements `_validate_devis`** :
+
+| Règle | Avant | Après |
+|---|---|---|
+| SIRET | Non vérifié | Non vérifié (non obligatoire sur devis) |
+| Montant TTC | Non vérifié | INFO |
+| Raison sociale émetteur | Non vérifiée | INFO |
+| Date validité | Toujours | Seulement si date extraite |
+| TVA cohérence | Toujours | Seulement si montants présents |
+
+**Statut global** : les checks `"info"` sont désormais exclus du calcul du statut global — une facture avec des champs non extraits reste `"ok"` et non `"warning"`.
+
+---
+
+### ML — Simulation de bruit OCR dans les données d'entraînement
+
+**Problème** : le modèle Random Forest affichait 100% d'accuracy parce que les données d'entraînement ET de test étaient du texte parfaitement propre (même générateur, même distribution). Le modèle mémorisait les keywords discriminants — score trivial et non représentatif du comportement réel sur OCR dégradé.
+
+**Fix** :
+- Ajout de `_degrade_text_ocr(severity)` dans `data-generator/generator.py` : simule les erreurs typiques Tesseract (confusions `l/I/1`, `0/O`, `rn/m`, espaces parasites, fusions de mots, suppression de lignes)
+- `generate_training_dataset()` applique le bruit sur 55% des samples avec distribution réaliste :
+
+| Catégorie | Part | Severity | Représente |
+|---|---|---|---|
+| Propre | 45% | 0 | PDF natif bien extrait |
+| Léger | 30% | 0.15–0.35 | Bon scanner, quelques artefacts |
+| Modéré | 20% | 0.35–0.60 | Scan moyen, Tesseract imparfait |
+| Fort | 5% | 0.60–0.85 | Mauvais scan, très dégradé |
+
+- Suppression du fallback `_generate_inline` dans `train.py` : erreur fatale explicite si le générateur n'est pas accessible (plutôt que produire silencieusement un modèle biaisé)
+- Ajout `backend/data-generator/README.md` expliquant l'architecture volume mount
+
+**Résultat attendu** : accuracy 85–94% (vs 100% artificiel) — réaliste et défendable.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `data-generator/generator.py` | Ajout `_degrade_text_ocr()` + refonte `generate_training_dataset()` |
+| `backend/pipeline/classification/train.py` | Suppression `_generate_inline`, erreur fatale si générateur absent |
+| `backend/data-generator/README.md` | Documentation architecture volume mount |
+
+---
+
 ## [2026-03-17] — BUGFIX : "Document introuvable" après traitement + Visualiseur de documents
 
 ### Bug 1 — ValidationStatus manquant : "info"
