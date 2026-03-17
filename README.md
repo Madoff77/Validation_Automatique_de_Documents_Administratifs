@@ -40,6 +40,8 @@ Avant de commencer, vérifier que les outils suivants sont installés :
 
 **Windows** : S'assurer que WSL2 est activé et que Docker utilise le backend WSL2.
 
+> **Contraintes mémoire** : Si la machine est limitée en RAM, il est possible de démarrer les services par groupe (voir section [Démarrage partiel](#démarrage-partiel)).
+
 ---
 
 ## 2. Installation
@@ -64,7 +66,6 @@ docker info
 Copier le fichier d'environnement exemple :
 
 ```bash
-
 # Windows (PowerShell)
 Copy-Item .env.example .env
 ```
@@ -101,36 +102,48 @@ AIRFLOW_ADMIN_PASSWORD=admin
 make up
 ```
 
-Cette commande démarre **9 services** Docker en parallèle :
+### Démarrage complet
 
-| Service | Rôle | Healthcheck |
-|---------|------|-------------|
-| `mongodb` | Base de données principale | `mongosh --eval "db.adminCommand('ping')"` |
-| `mongo-express` | Interface web MongoDB | HTTP :8081 |
-| `postgres` | Base Airflow | `pg_isready` |
-| `minio` | Stockage objets S3 | HTTP :9000/minio/health/live |
-| `minio-init` | Création des buckets (raw/clean/curated) | one-shot |
+Cette commande démarre tous les services Docker :
+
+| Service | Rôle | Port |
+|---------|------|------|
+| `mongo` | Base de données principale | 27017 |
+| `mongo-express` | Interface web MongoDB | 8081 |
+| `postgres` | Base Airflow | 5432 |
+| `minio` | Stockage objets S3-compatible | 9000 / 9001 |
+| `minio-init` | Création des buckets raw/clean/curated | one-shot |
 | `airflow-init` | Initialisation DB Airflow + user admin | one-shot |
-| `airflow-webserver` | Interface Airflow | HTTP :8080 |
-| `airflow-scheduler` | Planificateur DAGs | processus |
-| `backend-api` | API FastAPI | HTTP :8000/health |
-| `frontend-crm` | Interface opérateurs | HTTP :3000 |
-| `frontend-compliance` | Interface conformité | HTTP :3001 |
+| `airflow-webserver` | Interface Airflow | 8080 |
+| `airflow-scheduler` | Planificateur DAGs | — |
+| `backend-api` | API FastAPI | 8000 |
+| `frontend-crm` | Interface opérateurs | 5173 |
+| `frontend-compliance` | Interface conformité | 5174 |
 
-### Attendre que tout soit prêt
+### Démarrage partiel
 
-Le démarrage complet prend **2 à 4 minutes** selon votre machine.
+Sur les machines avec peu de RAM (< 8 Go), démarrer les services par groupe :
 
 ```bash
-# Voir l'état des services
-docker compose ps
+# Groupe 1 — Socle (obligatoire)
+docker compose up -d mongo minio minio-init backend-api
 
-# Attendre que le backend soit prêt
-curl http://localhost:8000/health
-# Réponse attendue : {"status":"ok"}
+# Groupe 2 — Interfaces (ajouter selon besoin)
+docker compose up -d frontend-crm frontend-compliance mongo-express
+
+# Groupe 3 — Airflow (lourd, optionnel pour la démo)
+docker compose up -d postgres airflow-init airflow-webserver airflow-scheduler
 ```
 
-Tous les services doivent afficher le statut `healthy` ou `running`.
+### Vérifier que tout est prêt
+
+```bash
+docker compose ps
+
+# Tester le backend (PowerShell)
+Invoke-RestMethod http://localhost:8000/health
+# Réponse attendue : status ok
+```
 
 ---
 
@@ -140,18 +153,25 @@ Une fois la stack démarrée, peupler la base avec les données de démonstratio
 
 ```bash
 make seed
+# ou directement :
+docker compose exec backend-api python /app/scripts/seed.py
 ```
 
 Cette commande crée :
 - **3 utilisateurs** : admin, operator, viewer (avec rôles distincts)
 - **3 fournisseurs** : BTP SOLUTIONS SAS, TECHNO SERVICES EURL, CONSEIL & CO SARL
-- **11 documents** traités avec le pipeline complet, incluant des anomalies intentionnelles :
-  - SIRET invalide (Luhn fail)
-  - Document expiré (URSSAF > 30 jours)
-  - Incohérence TVA (montants ne correspondent pas)
-  - Kbis trop ancien (> 90 jours)
+- **11 documents** générés via `data-generator/` et traités avec le pipeline complet :
+  - Contenu réaliste : SIRET Luhn-valide, montants cohérents, dates, IBAN MOD-97
+  - Format **PDF** (via fpdf2) ou **image JPG dégradée** (flou, bruit, rotation, basse résolution) selon le scénario
+  - Anomalies intentionnelles :
+    - SIRET invalide (attestation SIRET TECHNO SERVICES)
+    - Document expiré (URSSAF BTP)
+    - Kbis trop ancien (> 90 jours — CONSEIL & CO)
+    - Scan fortement dégradé (combined sévérité 0.8 — Facture Conseil)
 
-Durée : ~2-3 minutes (le pipeline OCR + ML tourne sur chaque document).
+> Le seed est idempotent : relancer `make seed` ne crée pas de doublons.
+
+> **Prérequis** : le dossier `data-generator/` est monté dans le container via le volume Docker (voir `docker-compose.yml`). `fpdf2` doit être installé dans l'image (`requirements.txt`).
 
 ---
 
@@ -162,52 +182,47 @@ make train
 ```
 
 Cette commande :
-1. Génère **~1200 documents synthétiques** (200 par classe × 6 types)
-2. Applique les dégradations simulées (flou, rotation, bruit, ombres...)
-3. Entraîne le **TF-IDF + RandomForest** (200 arbres, validation croisée 5-fold)
-4. Affiche le rapport de classification par classe
-5. Sauvegarde `classifier.joblib` et `vectorizer.joblib`
-
-Exemple de sortie attendue :
-```
-Generating training data...  1200 documents
-Training TF-IDF vectorizer... 8000 features
-Training RandomForest (200 trees)...
-Cross-validation F1-macro: 0.943 (+/- 0.012)
-
-Classification Report:
-              precision  recall  f1-score
-facture          0.96      0.95      0.96
-devis            0.93      0.94      0.93
-kbis             0.98      0.97      0.97
-...
-Model saved to pipeline/classification/models/
-```
+1. Génère des documents synthétiques réalistes via `data-generator/generator.py` (150 exemples × 6 classes)
+2. Entraîne le **TF-IDF (1-2 grams, 8000 features) + RandomForest (200 arbres)** avec validation croisée 5 folds
+3. Sauvegarde `classifier.joblib` et `vectorizer.joblib` dans `/app/models/trained/`
 
 > Si cette étape est sautée, le système utilise automatiquement le **classifieur par mots-clés** (fallback), fonctionnel mais moins précis.
+
+> **Prérequis** : le volume `data-generator/` doit être monté (`/app/data-generator` dans le container). Sans ce volume, `make train` bascule sur un générateur inline simplifié qui produit des données trop homogènes (accuracy 100% non représentative).
 
 ---
 
 ## 7. Accéder aux interfaces
 
-Une fois tout démarré :
-
 | Interface | URL | Identifiants |
 |-----------|-----|--------------|
-| **Frontend CRM** | http://localhost:3000 | admin / admin123 |
-| **Frontend Compliance** | http://localhost:3001 | admin / admin123 |
+| **Frontend CRM** | http://localhost:5173 | admin / admin123 |
+| **Frontend Compliance** | http://localhost:5174 | admin / admin123 |
 | **API Swagger** | http://localhost:8000/docs | — |
 | **Airflow** | http://localhost:8080 | admin / admin |
 | **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin |
 | **Mongo Express** | http://localhost:8081 | admin / admin |
 
-### Comptes utilisateurs disponibles
+### Comptes utilisateurs
 
 | Rôle | Utilisateur | Mot de passe | Permissions |
 |------|-------------|--------------|-------------|
-| Admin | `admin` | `admin123` | CRUD complet, gestion utilisateurs |
-| Opérateur | `operator` | `operator123` | Upload documents, lecture |
-| Viewer | `viewer` | `viewer123` | Lecture seule |
+| Admin | `admin` | `admin123` | Tout + gestion utilisateurs |
+| Opérateur | `operator` | `operator123` | Upload, édition, résolution anomalies |
+| Viewer | `viewer` | `viewer123` | Lecture seule — aucune action d'écriture |
+
+### Permissions par rôle
+
+| Action | viewer | operator | admin |
+|--------|:------:|:--------:|:-----:|
+| Consulter documents / fournisseurs / anomalies | ✅ | ✅ | ✅ |
+| Uploader un document | ❌ | ✅ | ✅ |
+| Créer / modifier un fournisseur | ❌ | ✅ | ✅ |
+| Résoudre une anomalie | ❌ | ✅ | ✅ |
+| Relancer le pipeline | ❌ | ✅ | ✅ |
+| Créer des utilisateurs | ❌ | ❌ | ✅ |
+
+> Le backend valide chaque action. Le frontend masque les boutons non autorisés selon le rôle pour une meilleure expérience utilisateur.
 
 ---
 
@@ -215,25 +230,28 @@ Une fois tout démarré :
 
 ### Scénario 1 — Uploader et traiter un document (Frontend CRM)
 
-1. Ouvrir **http://localhost:3000**
-2. Se connecter avec `admin` / `admin123`
+1. Ouvrir **http://localhost:5173**
+2. Se connecter avec `operator` / `operator123`
 3. Cliquer sur **"Upload"** dans le menu gauche
 4. Sélectionner un fournisseur dans la liste déroulante
 5. Glisser-déposer un fichier PDF ou image (facture, kbis, rib...)
 6. Cliquer **"Uploader"** — le pipeline démarre automatiquement
 7. Aller dans **"Documents"** pour suivre le statut en temps réel :
    - `pending` → en attente
-   - `processing` → pipeline en cours
-   - `processed` → terminé avec succès
-   - `failed` → erreur (voir logs Airflow)
+   - `preprocessing` → OCR en cours
+   - `classified` → type détecté
+   - `extracted` → champs extraits
+   - `validated` → validation terminée
+   - `processed` → pipeline complet
+   - `error` → erreur (relançable)
 8. Cliquer sur le document pour voir les **champs extraits** et les **anomalies détectées**
 
 ### Scénario 2 — Surveiller la conformité (Frontend Compliance)
 
-1. Ouvrir **http://localhost:3001**
+1. Ouvrir **http://localhost:5174**
 2. Se connecter avec `admin` / `admin123`
 3. **Tableau de bord** : vue globale avec graphique de répartition et anomalies récentes
-4. **Anomalies** : liste filtrée par sévérité/type, résolution inline avec notes
+4. **Anomalies** : liste filtrée par sévérité/type, résolution inline (operator+)
 5. **Expirations** : documents expirant dans les 30 jours, triés par urgence
 6. **Fournisseurs** : statut de conformité par fournisseur, clic pour le détail
 
@@ -249,8 +267,6 @@ Une fois tout démarré :
 ```bash
 make demo
 ```
-
-Script automatisé qui enchaîne : authentification → stats initiales → upload d'un document → attente traitement → rapport des anomalies → résumé conformité.
 
 ---
 
@@ -278,7 +294,7 @@ docker compose logs -f airflow-scheduler
 
 # Accéder au shell d'un container
 docker compose exec backend-api bash
-docker compose exec mongodb mongosh -u root -p rootpassword
+docker compose exec mongo mongosh -u root -p rootpassword
 
 # Relancer un seul service
 docker compose restart backend-api
@@ -294,7 +310,7 @@ docker compose restart backend-api
 │                                                                       │
 │  ┌──────────────┐  ┌──────────────────┐  ┌───────────────────────┐ │
 │  │ frontend-crm │  │ frontend-        │  │     backend-api        │ │
-│  │  :3000       │  │ compliance :3001 │  │     FastAPI :8000      │ │
+│  │  :5173       │  │ compliance :5174 │  │     FastAPI :8000      │ │
 │  │  React/Vite  │  │ React/Vite       │  │     JWT + RBAC         │ │
 │  └──────┬───────┘  └────────┬─────────┘  └──────────┬────────────┘ │
 │         │                   │                        │               │
@@ -308,8 +324,8 @@ docker compose restart backend-api
 │                                                                       │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │                  Pipeline OCR → ML → Validation                 │ │
-│  │  Upload → OCR (7 stratégies) → TF-IDF+RF → Regex/spaCy → Rules│ │
-│  │        Tesseract   Laplacian    200 arbres  NER    Luhn/MOD-97  │ │
+│  │  Upload → OCR (7 stratégies) → TF-IDF+RF → Regex → Rules       │ │
+│  │        Tesseract   Laplacian    200 arbres  Luhn/MOD-97         │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -318,8 +334,8 @@ docker compose restart backend-api
 
 | Bucket | Contenu | Format |
 |--------|---------|--------|
-| `raw` | Fichiers originaux uploadés | PDF / PNG / JPG |
-| `clean` | Texte extrait par OCR | `.txt` |
+| `raw` | Fichiers originaux uploadés | PDF / PNG / JPG / TXT |
+| `clean` | Texte extrait par OCR + métadonnées | `.txt`, `.json` |
 | `curated` | Données structurées finales | `.json` |
 
 ### MongoDB — 4 collections
@@ -339,44 +355,43 @@ docker compose restart backend-api
 ┌─────────┐
 │  UPLOAD │  Fichier → MinIO bucket "raw"
 │         │  Métadonnées → MongoDB (status: pending)
-│         │  Déclenchement Airflow via REST API
+│         │  Déclenchement pipeline (Airflow ou synchrone)
 └────┬────┘
      │
 ┌────▼────┐
-│   OCR   │  PDF natif → pdfplumber (rapide, 98% conf.)
+│   OCR   │  PDF natif → pdfplumber (rapide, conf. 0.98)
 │         │  Scan/Image → OpenCV + Tesseract 5
-│         │  7 stratégies adaptatives (score Laplacien)
-│         │  Retry sur image brute si confiance < 0.4
+│         │  Texte brut (.txt) → lecture directe (conf. 1.0)
+│         │  7 stratégies adaptatives selon score Laplacien
 └────┬────┘
      │
 ┌────▼──────────┐
 │  CLASSIFICATION│  Normalisation texte (SIRET, montants, dates)
-│               │  TF-IDF (8000 features, 1-2 grams)
-│               │  RandomForest (200 arbres, balanced)
-│               │  Fallback mots-clés si confiance < 0.6
+│               │  TF-IDF + RandomForest (200 arbres)
+│               │  Fallback mots-clés si modèle absent ou confiance < 0.6
 └────┬──────────┘
      │
 ┌────▼────────┐
 │  EXTRACTION │  Regex compilées : SIRET, TVA, IBAN, montants, dates
-│             │  spaCy NER fr_core_news_sm : raison sociale
+│             │  Heuristique suffixes juridiques : raison sociale
 │             │  Déduction croisée : si 2 montants connus → 3e calculé
 └────┬────────┘
      │
 ┌────▼──────────┐
-│  VALIDATION   │  SIRET : algorithme de Luhn (+ exception La Poste)
-│               │  IBAN  : MOD-97 (détecte 99.9% des erreurs)
+│  VALIDATION   │  SIRET : algorithme de Luhn
+│               │  IBAN  : MOD-97
 │               │  TVA   : clé = (12 + 3×SIREN%97)%97
 │               │  Cohérence : montant_ht × taux ≈ montant_tva (±1€)
 │               │  Kbis : âge < 90 jours (obligation légale)
 │               │  Expiration : alerte si < 30 jours
-│               │  Inter-docs : SIRET cohérent entre tous les docs du fournisseur
+│               │  Inter-docs : SIRET cohérent entre docs du fournisseur
 │               │  → Création anomalies MongoDB
 │               │  → Mise à jour compliance_status fournisseur
 └────┬──────────┘
      │
 ┌────▼──────────┐
 │  FINALISATION │  JSON structuré → MinIO bucket "curated"
-│               │  document.status = "processed" ou "failed"
+│               │  document.status = "processed" ou "error"
 └───────────────┘
 ```
 
@@ -405,22 +420,21 @@ S19_Hackathton/
 │   │       └── stats.py            # Dashboard stats
 │   │
 │   ├── pipeline/
-│   │   ├── processor.py            # Orchestrateur des 5 tâches
+│   │   ├── processor.py            # Orchestrateur sync des 5 tâches
 │   │   ├── ocr/
 │   │   │   ├── preprocessor.py     # 7 stratégies OpenCV adaptatives
-│   │   │   └── extractor.py        # pdfplumber + Tesseract multi-PSM
+│   │   │   └── extractor.py        # pdfplumber + Tesseract + plain_text
 │   │   ├── classification/
 │   │   │   ├── classifier.py       # TF-IDF + RF + fallback keywords
 │   │   │   └── train.py            # Entraînement + cross-validation
 │   │   ├── extraction/
-│   │   │   └── field_extractor.py  # Regex + spaCy NER
+│   │   │   └── field_extractor.py  # Regex + heuristique suffixes juridiques
 │   │   └── validation/
-│   │       ├── validator.py        # Luhn, MOD-97, TVA, cohérence
-│   │       └── test_rules.py       # 25+ tests unitaires des règles
+│   │       └── validator.py        # Luhn, MOD-97, TVA, cohérence, inter-docs
 │   │
 │   ├── storage/
-│   │   ├── mongo_client.py         # Client Motor async (singleton)
-│   │   └── minio_client.py         # Client MinIO (upload/download)
+│   │   ├── mongo_client.py         # Client async Motor (API) + sync PyMongo (pipeline)
+│   │   └── minio_client.py         # Client MinIO (upload/download/presign)
 │   │
 │   ├── utils/
 │   │   └── logger.py               # structlog JSON
@@ -435,46 +449,50 @@ S19_Hackathton/
 │   └── requirements.txt
 │
 ├── data-generator/
-│   ├── generator.py                # Générateur docs synthétiques
-│   └── requirements.txt
+│   └── generator.py                # Générateur docs synthétiques (PDF, images dégradées)
+│                                   # Monté dans le container : /app/data-generator
 │
-├── frontend-crm/                   # Interface opérateurs (React)
+├── frontend-crm/                   # Interface opérateurs (React + Vite)
 │   ├── src/
-│   │   ├── api/                    # Axios + intercepteur refresh JWT
-│   │   ├── contexts/               # AuthContext
+│   │   ├── api/                    # Axios + intercepteur auto-refresh JWT
+│   │   ├── contexts/               # AuthContext (user, login, logout)
+│   │   ├── hooks/
+│   │   │   └── usePermissions.js   # Permissions UX centralisées par rôle
 │   │   ├── components/             # Layout, Sidebar, StatusBadge
 │   │   └── pages/
 │   │       ├── Dashboard.jsx       # Stats + documents récents
-│   │       ├── Upload.jsx          # Dropzone multi-fichiers
+│   │       ├── Upload.jsx          # Dropzone multi-fichiers (operator+)
 │   │       ├── Documents.jsx       # Table filtrée
 │   │       ├── DocumentDetail.jsx  # Champs extraits + validations
 │   │       ├── Suppliers.jsx       # Liste fournisseurs
 │   │       └── SupplierDetail.jsx  # Détail + auto-fill depuis docs
 │   └── Dockerfile / nginx.conf
 │
-├── frontend-compliance/            # Interface conformité (React)
+├── frontend-compliance/            # Interface conformité (React + Vite)
 │   ├── src/
 │   │   ├── api/
-│   │   ├── contexts/
+│   │   ├── contexts/               # AuthContext
+│   │   ├── hooks/
+│   │   │   └── usePermissions.js   # Permissions UX centralisées par rôle
 │   │   ├── components/
 │   │   └── pages/
 │   │       ├── Dashboard.jsx       # PieChart + anomalies récentes
-│   │       ├── Anomalies.jsx       # Table filtrée + résolution inline
+│   │       ├── Anomalies.jsx       # Table filtrée + résolution inline (operator+)
 │   │       ├── Expirations.jsx     # Traffic-light par urgence
 │   │       ├── Suppliers.jsx       # Conformité globale
 │   │       └── SupplierCompliance.jsx  # Drill-down par fournisseur
 │   └── Dockerfile / nginx.conf
 │
 ├── scripts/
-│   ├── seed.py                     # Données de démonstration
-│   ├── train_classifier.py         # Wrapper standalone train
+│   ├── seed.py                     # Données de démonstration (idempotent)
 │   └── demo.sh                     # Scénario de démo automatique
 │
 ├── docker/
 │   └── mongo-init.js               # Index MongoDB au démarrage
 │
 ├── docs/
-│   └── JURY_DEFENSE.md             # Q&A pour la soutenance
+│   ├── CONTEXT_MASTER.md           # Architecture et décisions techniques
+│   └── CHANGELOG_IMPLEMENTATION.md # Journal des modifications
 │
 ├── docker-compose.yml
 ├── .env.example
@@ -502,38 +520,37 @@ POST   /auth/register           Créer un utilisateur (admin only)
 ### Documents
 
 ```
-POST   /documents/upload        Multipart: file + supplier_id + doc_type
+POST   /documents/upload        Multipart: file + supplier_id + doc_type  [operator+]
 GET    /documents               ?status=&doc_type=&supplier_id=&limit=&skip=
 GET    /documents/{id}          Détail complet + extracted_fields + validation
-GET    /documents/{id}/download Redirect vers presigned URL MinIO (15 min)
-POST   /documents/{id}/reprocess Relancer le pipeline Airflow
-DELETE /documents/{id}          Suppression (admin only)
+GET    /documents/{id}/download Redirect vers presigned URL MinIO
+POST   /documents/{id}/reprocess Relancer le pipeline  [operator+]
+DELETE /documents/{id}          Suppression  [admin]
 ```
 
 ### Fournisseurs
 
 ```
 GET    /suppliers               ?search=&limit=&skip=
-POST   /suppliers               Créer { name, siret, contact_email, ... }
+POST   /suppliers               Créer { name, siret, ... }  [operator+]
 GET    /suppliers/{id}          Détail fournisseur
-PUT    /suppliers/{id}          Mettre à jour
-DELETE /suppliers/{id}          Supprimer (admin only)
-GET    /suppliers/{id}/compliance  { total_docs, expired, expiring_soon, ... }
+PUT    /suppliers/{id}          Mettre à jour  [operator+]
+DELETE /suppliers/{id}          Supprimer  [admin]
+GET    /suppliers/{id}/compliance  Statut conformité détaillé
 ```
 
 ### Anomalies
 
 ```
 GET    /anomalies               ?severity=&type=&resolved=&supplier_id=&limit=
-PATCH  /anomalies/{id}/resolve  { resolution_notes } → marque résolue + recalcule conformité
+PATCH  /anomalies/{id}/resolve  { resolved: true/false }  [operator+]
 GET    /anomalies/expiring-soon Documents expirant dans les 30 prochains jours
 ```
 
 ### Stats
 
 ```
-GET    /stats/dashboard         { total_suppliers, unresolved_anomalies, critical_anomalies,
-                                  documents_expiring_soon, total_documents, ... }
+GET    /stats/dashboard         { total_suppliers, unresolved_anomalies, ... }
 GET    /health                  { status: "ok" }
 ```
 
@@ -545,10 +562,10 @@ GET    /health                  { status: "ok" }
 
 ```bash
 # Vérifier que les ports ne sont pas déjà utilisés
-netstat -an | grep -E "8000|8080|9000|27017|5432"
+netstat -an | grep -E "8000|8080|9000|27017|5432|5173|5174"
 
 # Voir les logs d'un service en erreur
-docker compose logs mongodb
+docker compose logs mongo
 docker compose logs backend-api
 ```
 
@@ -556,10 +573,31 @@ docker compose logs backend-api
 
 ```bash
 # Vérifier que le backend est bien démarré
-curl http://localhost:8000/health
+powershell -Command "Invoke-RestMethod http://localhost:8000/health"
 
-# Relancer avec logs
-docker compose exec backend-api python /app/scripts/seed.py
+# Relancer directement (Windows Git Bash — utiliser sh -c pour éviter la conversion de chemin)
+docker compose exec backend-api sh -c "python /app/scripts/seed.py"
+```
+
+### Le seed génère des `.txt` vides au lieu de PDF/images
+
+Symptôme : tous les documents ont le statut `processed` mais toutes les anomalies sont `MISSING_FIELD`.
+
+Cause : le dossier `data-generator/` n'est pas accessible dans le container, ou `fpdf2` n'est pas installé.
+
+```bash
+# Vérifier que le volume est bien monté
+docker compose exec backend-api ls /app/data-generator/
+
+# Vérifier que fpdf2 est installé
+docker compose exec backend-api python -c "from fpdf import FPDF; print('fpdf2 OK')"
+
+# Si manquant → rebuilder l'image
+docker compose build backend-api
+docker compose up -d backend-api
+
+# Puis réinitialiser et re-seeder
+make clean && make up && make seed
 ```
 
 ### Le pipeline reste en `processing`
@@ -567,20 +605,18 @@ docker compose exec backend-api python /app/scripts/seed.py
 ```bash
 # Vérifier les logs Airflow
 docker compose logs airflow-scheduler
-docker compose logs airflow-webserver
 
-# Voir dans l'UI : http://localhost:8080 → DAG document_pipeline → Graph view
+# Voir dans l'UI : http://localhost:8080 → DAG document_pipeline
 ```
 
 ### Erreur de connexion MongoDB
 
 ```bash
 # Tester la connexion
-docker compose exec mongodb mongosh -u root -p rootpassword --eval "db.adminCommand('ping')"
+docker compose exec mongo mongosh -u root -p rootpassword --eval "db.adminCommand('ping')"
 
 # Recréer les volumes si corrompu
-make clean
-make up
+make clean && make up
 ```
 
 ### Modèle ML non chargé (classification par mots-clés utilisée)
@@ -590,7 +626,24 @@ make up
 make train
 
 # Vérifier la présence des fichiers
-docker compose exec backend-api ls /app/pipeline/classification/models/
+docker compose exec backend-api ls /app/models/trained/
+```
+
+### `make train` utilise le générateur inline au lieu du générateur externe
+
+Symptôme : message `[WARN] Générateur externe non disponible, génération inline...` — le modèle s'entraîne sur des données trop simplifiées (accuracy 100% artificielle).
+
+Cause : `data-generator/` n'est pas monté dans le container (volume manquant dans `docker-compose.yml`).
+
+```bash
+# Vérifier que le volume est bien monté
+docker compose exec backend-api sh -c "ls /app/data-generator/"
+# Doit afficher : generator.py  requirements.txt  templates
+
+# Si manquant → rebuilder avec le volume correctement déclaré
+docker compose build backend-api
+docker compose up -d backend-api
+make train
 ```
 
 ### Réinitialiser complètement
@@ -608,15 +661,17 @@ make train      # Réentraîne le modèle
 
 | Couche | Technologies |
 |--------|-------------|
-| **API** | Python 3.11, FastAPI, Uvicorn, Pydantic v2 |
-| **Auth** | python-jose JWT, bcrypt, RBAC (admin/operator/viewer) |
-| **Base de données** | MongoDB 7 (Motor async), Mongo Express |
+| **API** | Python 3.11, FastAPI-slim, Uvicorn, Pydantic v2 |
+| **Auth** | python-jose JWT, bcrypt/passlib, RBAC (admin/operator/viewer) |
+| **Base de données** | MongoDB 7 (Motor async + PyMongo sync), Mongo Express |
 | **Stockage** | MinIO S3-compatible, 3 buckets (raw/clean/curated) |
 | **OCR** | OpenCV 4, Tesseract 5 (fr+eng), pdfplumber, pdf2image |
-| **ML** | scikit-learn (TF-IDF + RandomForest), spaCy fr_core_news_sm |
+| **Génération documents** | fpdf2 (PDF), Pillow + OpenCV (images dégradées), Faker (données réalistes) |
+| **ML** | scikit-learn (TF-IDF + RandomForest), fallback keyword rules |
 | **Orchestration** | Apache Airflow 2.8 (LocalExecutor, REST API trigger) |
 | **Frontends** | React 18, Vite 5, Tailwind CSS 3, TanStack Query v5 |
+| **Permissions UI** | `usePermissions()` hook centralisé (canUpload, canEdit, ...) |
 | **UI libs** | Recharts, React Router v6, Lucide React, react-hot-toast |
 | **HTTP client** | Axios (intercepteur auto-refresh JWT) |
 | **Infra** | Docker Compose, Nginx, structlog (JSON logging) |
-| **Dev** | Faker (données synthétiques), fpdf2 (génération PDF) |
+| **Dev** | Faker (données synthétiques), python-stdnum (validation SIRET/IBAN) |

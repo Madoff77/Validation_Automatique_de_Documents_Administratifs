@@ -33,6 +33,13 @@ for path in ["/opt/airflow", "/app"]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
+# Configurer structlog pour que les logs apparaissent dans les task logs Airflow
+try:
+    from utils.logger import configure_logging
+    configure_logging()
+except Exception as _log_err:
+    print(f"[DAG] structlog config skipped: {_log_err}")
+
 # ─────────────────────────────────────────────────────────────
 # DEFAULTS
 # ─────────────────────────────────────────────────────────────
@@ -55,20 +62,70 @@ DEFAULT_ARGS = {
 # ─────────────────────────────────────────────────────────────
 
 def _get_document_id(context: dict) -> str:
-    """Extraire document_id depuis dag_run.conf."""
+    """
+    Extraire document_id depuis dag_run.conf.
+
+    Fallback dev : si aucun document_id fourni, récupère automatiquement
+    le document le plus récent en statut 'pending' (ou tout statut) depuis MongoDB.
+    Ce fallback est uniquement destiné aux tests locaux — en production, le
+    document_id est toujours injecté par le backend via l'API Airflow.
+    """
     conf = context["dag_run"].conf or {}
     document_id = conf.get("document_id")
-    if not document_id:
-        raise ValueError("dag_run.conf doit contenir 'document_id'")
-    return document_id
+
+    if document_id:
+        print(f"[DAG] document_id fourni via conf : {document_id}")
+        return document_id
+
+    # ── Fallback développement ────────────────────────────────
+    print("[DAG] Aucun document_id dans conf — fallback dev : recherche dans MongoDB")
+    try:
+        import pymongo
+
+        # Lire directement les env vars (évite d'importer api.config et ses dépendances FastAPI)
+        mongo_uri = os.environ.get("MONGO_URI", "mongodb://mongo:27017")
+        mongo_db = os.environ.get("MONGO_DB", "docplatform")
+
+        client = pymongo.MongoClient(mongo_uri)
+        db = client[mongo_db]
+
+        # Priorité : document pending (non encore traité)
+        doc = db.documents.find_one(
+            {"status": "pending"},
+            sort=[("upload_timestamp", pymongo.DESCENDING)],
+        )
+        # Sinon : n'importe quel document (pour re-tester)
+        if not doc:
+            doc = db.documents.find_one(
+                {},
+                sort=[("upload_timestamp", pymongo.DESCENDING)],
+            )
+        client.close()
+
+        if not doc:
+            raise ValueError("Fallback dev : aucun document trouvé dans MongoDB")
+
+        document_id = doc["document_id"]
+        print(
+            f"[DAG] Fallback dev — document_id sélectionné automatiquement : {document_id} "
+            f"(status={doc.get('status')}, type={doc.get('doc_type')}, "
+            f"fournisseur={doc.get('supplier_id')})"
+        )
+        return document_id
+
+    except Exception as e:
+        raise ValueError(
+            f"dag_run.conf doit contenir 'document_id' — fallback dev échoué : {e}"
+        ) from e
 
 
 def fn_preprocess_ocr(**context):
     """Task 1 : Preprocessing image + OCR."""
     document_id = _get_document_id(context)
+    print(f"[preprocess_ocr] START document_id={document_id}")
     from pipeline.processor import task_ocr
     result = task_ocr(document_id)
-    # Pousser dans XCom pour les tâches suivantes
+    print(f"[preprocess_ocr] DONE method={result.get('ocr_method')} confidence={result.get('ocr_confidence', 0):.2f} text_length={len(result.get('ocr_text', ''))}")
     context["ti"].xcom_push(key="document_id", value=document_id)
     context["ti"].xcom_push(key="ocr_text", value=result["ocr_text"])
     context["ti"].xcom_push(key="ocr_confidence", value=result["ocr_confidence"])
@@ -81,8 +138,10 @@ def fn_classify(**context):
     document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
     ocr_text = ti.xcom_pull(task_ids="preprocess_ocr", key="ocr_text")
 
+    print(f"[classify] START document_id={document_id} text_length={len(ocr_text or '')}")
     from pipeline.processor import task_classify
     result = task_classify(document_id, ocr_text=ocr_text)
+    print(f"[classify] DONE doc_type={result['doc_type']} confidence={result['confidence']:.3f}")
 
     ti.xcom_push(key="doc_type", value=result["doc_type"])
     ti.xcom_push(key="classification_confidence", value=result["confidence"])
@@ -96,8 +155,10 @@ def fn_extract_fields(**context):
     ocr_text = ti.xcom_pull(task_ids="preprocess_ocr", key="ocr_text")
     doc_type = ti.xcom_pull(task_ids="classify", key="doc_type")
 
+    print(f"[extract_fields] START document_id={document_id} doc_type={doc_type}")
     from pipeline.processor import task_extract
     result = task_extract(document_id, doc_type=doc_type, ocr_text=ocr_text)
+    print(f"[extract_fields] DONE fields_found={len([v for v in result['extracted'].values() if v is not None])}")
 
     ti.xcom_push(key="extracted", value=result["extracted"])
     return result
@@ -108,8 +169,10 @@ def fn_validate(**context):
     ti = context["ti"]
     document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
 
+    print(f"[validate] START document_id={document_id}")
     from pipeline.processor import task_validate
     result = task_validate(document_id)
+    print(f"[validate] DONE status={result['validation_status']} anomalies={result['anomaly_count']}")
     ti.xcom_push(key="validation_status", value=result["validation_status"])
     return result
 
@@ -119,8 +182,11 @@ def fn_finalize(**context):
     ti = context["ti"]
     document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
 
+    print(f"[finalize] START document_id={document_id}")
     from pipeline.processor import task_finalize
-    return task_finalize(document_id)
+    result = task_finalize(document_id)
+    print(f"[finalize] DONE curated_path={result.get('curated_path')}")
+    return result
 
 
 # ─────────────────────────────────────────────────────────────
@@ -130,8 +196,13 @@ def fn_finalize(**context):
 def on_failure_callback(context):
     """Marquer le document en erreur dans MongoDB si le DAG échoue."""
     try:
+        # Priorité : conf explicite, sinon XCom (cas fallback dev)
         conf = context["dag_run"].conf or {}
         document_id = conf.get("document_id")
+        if not document_id:
+            ti = context.get("ti")
+            if ti:
+                document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
         if not document_id:
             return
 
@@ -173,7 +244,7 @@ Ce DAG traite un document administratif de bout en bout :
 
 1. **preprocess_ocr** : Preprocessing OpenCV adaptatif (7 stratégies) + OCR Tesseract multi-pass
 2. **classify** : Classification TF-IDF + Random Forest (6 types : FACTURE, DEVIS, SIRET, URSSAF, KBIS, RIB)
-3. **extract_fields** : Extraction regex + spaCy (SIRET, TVA, montants, dates, IBAN...)
+3. **extract_fields** : Extraction regex (SIRET, TVA, montants, dates, IBAN, raison sociale...)
 4. **validate** : Validation inter-documents, détection anomalies (expiration, incohérences SIRET, TVA)
 5. **finalize** : Stockage JSON structuré en zone curated MinIO
 
@@ -196,7 +267,7 @@ Ce DAG traite un document administratif de bout en bout :
     extract_fields = PythonOperator(
         task_id="extract_fields",
         python_callable=fn_extract_fields,
-        doc_md="Extraction regex + spaCy : SIRET, TVA, montants, dates, IBAN",
+        doc_md="Extraction regex : SIRET, TVA, montants, dates, IBAN, raison sociale",
     )
 
     validate = PythonOperator(

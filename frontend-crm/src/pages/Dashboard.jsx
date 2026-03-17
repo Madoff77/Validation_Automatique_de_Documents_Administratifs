@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { FileText, Users, CheckCircle, AlertTriangle, Clock, XCircle, Upload, TrendingUp } from 'lucide-react'
 import { statsApi, documentsApi } from '../api/documents'
 import { DocStatusBadge, DocTypeBadge } from '../components/StatusBadge'
+import { usePermissions } from '../hooks/usePermissions'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -32,6 +33,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue', loading }) {
 }
 
 export default function Dashboard() {
+  const { canUpload } = usePermissions()
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['stats'],
     queryFn: statsApi.dashboard,
@@ -51,10 +53,12 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
           <p className="text-sm text-gray-500 mt-0.5">Vue d'ensemble de la plateforme</p>
         </div>
-        <Link to="/upload" className="btn-primary">
-          <Upload size={16} />
-          Importer des documents
-        </Link>
+        {canUpload && (
+          <Link to="/upload" className="btn-primary">
+            <Upload size={16} />
+            Importer des documents
+          </Link>
+        )}
       </div>
 
       {/* Stats */}

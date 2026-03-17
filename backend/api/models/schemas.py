@@ -40,6 +40,7 @@ class ValidationStatus(str, Enum):
     WARNING = "warning"
     ERROR = "error"
     PENDING = "pending"
+    INFO = "info"
 
 
 class AnomalySeverity(str, Enum):

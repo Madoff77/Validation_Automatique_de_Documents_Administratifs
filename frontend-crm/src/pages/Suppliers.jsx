@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Building2, ChevronRight, Loader2, X } from 'lucide-react'
 import { suppliersApi } from '../api/suppliers'
 import { ComplianceBadge } from '../components/StatusBadge'
+import { usePermissions } from '../hooks/usePermissions'
 import { toast } from 'sonner';
 
 function CreateModal({ onClose }) {
@@ -78,6 +79,7 @@ function CreateModal({ onClose }) {
 export default function Suppliers() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const { canCreateSupplier } = usePermissions()
 
   const { data: suppliers = [], isLoading } = useQuery({
     queryKey: ['suppliers', search],
@@ -91,9 +93,11 @@ export default function Suppliers() {
           <h1 className="text-2xl font-bold text-gray-900">Fournisseurs</h1>
           <p className="text-sm text-gray-500 mt-0.5">{suppliers.length} fournisseur{suppliers.length > 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          <Plus size={16} /> Nouveau fournisseur
-        </button>
+        {canCreateSupplier && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            <Plus size={16} /> Nouveau fournisseur
+          </button>
+        )}
       </div>
 
       {/* Recherche */}

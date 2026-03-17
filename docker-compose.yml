@@ -11,8 +11,10 @@ x-airflow-common: &airflow-common
     AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
     AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    AIRFLOW__WEBSERVER__WORKERS: "2"
+    AIRFLOW__WEBSERVER__WORKER_TIMEOUT: "300"
     # Connection to backend services
-    MONGO_URI: mongodb://mongo:27017
+    MONGO_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASSWORD:-rootpassword}@mongo:27017
     MONGO_DB: ${MONGO_DB:-docplatform}
     MINIO_ENDPOINT: minio:9000
     MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -26,6 +28,8 @@ x-airflow-common: &airflow-common
     - ./backend/pipeline:/opt/airflow/pipeline
     - ./backend/storage:/opt/airflow/storage
     - ./backend/utils:/opt/airflow/utils
+    - ./backend/api:/opt/airflow/api
+    - model_data:/app/models/trained
   depends_on:
     postgres:
       condition: service_healthy
@@ -161,7 +165,8 @@ services:
     <<: *airflow-common
     container_name: docplatform-airflow-webserver
     restart: unless-stopped
-    command: webserver
+    command: >
+      bash -c "rm -f /opt/airflow/airflow-webserver.pid && airflow webserver"
     ports:
       - "8080:8080"
     healthcheck:

@@ -320,7 +320,7 @@ Airflow DAG: document_pipeline
 | Orchestration | Airflow LocalExecutor | Celery, Temporal | Simplicité démo, UI intégrée |
 | Storage objet | MinIO | AWS S3, Azure Blob | Local, S3-compatible, gratuit |
 | DB | MongoDB | PostgreSQL | Schéma flexible, documents JSON natifs |
-| API | FastAPI | Django REST, Flask | Async, auto-docs Swagger, typage |
+| API | FastAPI-slim | Django REST, Flask | Async, auto-docs Swagger, typage ; version slim pour réduire l'image Docker |
 | Airflow executor | Local | Celery | Pas de Redis/broker nécessaire |
 | Frontend build | Vite | CRA, Next.js | Rapide, léger, parfait pour demo |
 
@@ -339,6 +339,16 @@ Airflow DAG: document_pipeline
 - Backend FastAPI skeleton
 - MongoDB + MinIO clients
 - Healthchecks
+
+### Adaptations setup machine (2026-03-16) ✅
+- `version: "3.9"` supprimé du docker-compose (Docker Compose v2 ne l'exige plus)
+- Healthcheck MinIO désactivé (image sans `curl`) → `minio-init` en dépendance simple
+- Healthchecks `backend-api` et `airflow-webserver` : `curl` → `python urllib.request` (curl absent de python:3.11-slim)
+- `backend-api` depends_on minio : `service_healthy` → `service_started`
+- `fastapi` → `fastapi-slim` (image plus légère, API identique)
+- `stdnum` → `python-stdnum` (nom PyPI correct)
+- `email-validator==2.3.0` ajouté explicitement (requis par `pydantic.EmailStr`)
+- `uuid`, `spacy` supprimés des dépendances (stdlib / non nécessaire)
 
 ### Phase 3 — Générateur de Données
 - Faker + templates documents

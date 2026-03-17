@@ -36,13 +36,12 @@ logger = get_logger(__name__)
 TESSERACT_CONFIGS = [
     # PSM 3 : auto — détection colonne + orientation  (défaut, bon pour tout)
     r"--oem 3 --psm 3 -l fra+eng",
-    # PSM 6 : bloc de texte uniforme  (bon pour formulaires)
+    # PSM 6 : bloc de texte uniforme  (bon pour formulaires/factures)
     r"--oem 3 --psm 6 -l fra+eng",
-    # PSM 4 : colonne variable  (bon pour factures multi-colonnes)
-    r"--oem 3 --psm 4 -l fra+eng",
-    # PSM 11 : sparse text  (bon pour documents très dégradés)
-    r"--oem 3 --psm 11 -l fra+eng",
 ]
+
+# Seuil de confiance au-dessus duquel on arrête d'essayer d'autres configs
+EARLY_STOP_CONFIDENCE = 0.65
 
 # Seuil minimum de confiance Tesseract (0-100) pour conserver un mot
 MIN_WORD_CONFIDENCE = 20
@@ -131,6 +130,7 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
     """
     Lancer Tesseract sur une image PIL avec une configuration donnée.
     Retourne (texte, confiance_moyenne).
+    Un seul appel image_to_data — on en extrait à la fois le texte et la confiance.
     """
     try:
         data = pytesseract.image_to_data(
@@ -138,7 +138,6 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
             config=config,
             output_type=pytesseract.Output.DICT,
         )
-        # Filtrer les mots avec confiance suffisante
         words = []
         confidences = []
         for i, conf in enumerate(data["conf"]):
@@ -148,7 +147,7 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
                     words.append(word)
                     confidences.append(float(conf))
 
-        text = pytesseract.image_to_string(pil_img, config=config)
+        text = " ".join(words)
         avg_conf = float(np.mean(confidences)) / 100.0 if confidences else 0.0
 
         return text.strip(), avg_conf
@@ -159,8 +158,9 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
 
 def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
     """
-    Essayer plusieurs configurations Tesseract sur une image préprocessée,
+    Essayer les configurations Tesseract sur une image préprocessée,
     retourner (texte, confiance, config_utilisée) du meilleur résultat.
+    Early stop si la confiance dépasse EARLY_STOP_CONFIDENCE.
     """
     pil_img = Image.fromarray(np_img)
     best_text = ""
@@ -169,12 +169,14 @@ def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
 
     for config in TESSERACT_CONFIGS:
         text, conf = _tesseract_single(pil_img, config)
-        # Critère : confiance × longueur normalisée (favorise les résultats riches ET fiables)
         score = conf * min(len(text) / 500.0, 1.0)
         if score > best_conf * min(len(best_text) / 500.0, 1.0):
             best_text = text
             best_conf = conf
             best_config = config
+        # Arrêter dès qu'on a une bonne confiance — inutile de tester les autres configs
+        if best_conf >= EARLY_STOP_CONFIDENCE:
+            break
 
     return best_text, best_conf, best_config
 
@@ -238,6 +240,18 @@ def extract_text(file_bytes: bytes, mime_type: str) -> OCRResult:
         return _extract_from_pdf(file_bytes)
     elif mime_type in ("image/jpeg", "image/png", "image/tiff", "image/bmp", "image/webp"):
         return _extract_from_image(file_bytes)
+    elif mime_type.startswith("text/"):
+        # Fichier texte brut (seed sans générateur) — pas besoin d'OCR
+        text = file_bytes.decode("utf-8", errors="replace")
+        text = _clean_ocr_text(text)
+        return OCRResult(
+            text=text,
+            confidence=1.0,
+            method="plain_text",
+            ocr_config=None,
+            page_count=1,
+            word_count=len(text.split()),
+        )
     else:
         logger.warning("unknown_mime_type", mime_type=mime_type)
         return _extract_from_image(file_bytes)

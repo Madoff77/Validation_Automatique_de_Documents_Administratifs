@@ -19,5 +19,3 @@ USER airflow
 COPY requirements.txt /tmp/airflow-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/airflow-requirements.txt
 
-# Télécharger modèle spaCy français
-RUN python -m spacy download fr_core_news_md
