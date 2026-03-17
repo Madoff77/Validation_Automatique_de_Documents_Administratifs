@@ -9,13 +9,12 @@ numpy==1.26.4
 scikit-image==0.23.2
 scikit-learn==1.4.2
 joblib==1.4.0
-spacy==3.7.4
 motor==3.4.0
 pymongo==4.7.2
 minio==7.2.7
 structlog==24.2.0
 python-dateutil==2.9.0
-stdnum==1.20
+python-stdnum==1.20
 pydantic==2.7.1
 pydantic-settings==2.2.1
 python-dotenv==1.0.1

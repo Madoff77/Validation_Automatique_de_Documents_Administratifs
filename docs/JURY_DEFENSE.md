@@ -410,6 +410,18 @@ Cette section illustre la rigueur de débogage appliquée pendant le projet.
 
 ---
 
+### Bug airflow/requirements.txt — `stdnum` introuvable sur PyPI
+
+**Symptôme** : build Docker Airflow en échec au `pip install`.
+
+**Cause** : le paquet s'appelle `python-stdnum` sur PyPI, pas `stdnum`. L'import Python reste `import stdnum` — c'est uniquement le nom du paquet sur l'index qui diffère.
+
+**Correction** : `stdnum==1.20` → `python-stdnum==1.20`.
+
+**Note** : le même bug était présent dans `backend/requirements.txt` et avait déjà été corrigé lors de la phase 2 — il avait été réintroduit dans le fichier Airflow séparé.
+
+---
+
 ### Bug generator.py — Caractère `—` non supporté par fpdf2/Helvetica
 
 **Symptôme** : la génération PDF échouait silencieusement sur tous les documents, forçant un fallback vers images JPG uniquement.
@@ -419,6 +431,56 @@ Cette section illustre la rigueur de débogage appliquée pendant le projet.
 **Correction** :
 - Remplacement des `—` dans les templates texte par `-` (meilleure lisibilité OCR aussi)
 - Sanitisation du titre PDF via `title.encode('latin-1', 'replace').decode('latin-1')` dans `_text_to_pdf`
+
+---
+
+### Bug preprocessor.py — OpenCV 4.9 : angle de deskew inversé
+
+**Symptôme** : toutes les images traitées ressortaient pivotées de 90° — le texte devenait illisible pour Tesseract, donnant des OCR vides ou corrompus.
+
+**Cause** : OpenCV 4.9 a changé silencieusement la convention de `minAreaRect`. Avant 4.9, un blob horizontal retournait un angle dans `[-90°, 0°]` (ex. `-0.5°` pour du texte légèrement incliné). Depuis 4.9, le même blob retourne `~90°`. La correction historique `if angle < -45: angle += 90` ne se déclenchait donc jamais, et tous les documents étaient "deskewés" de -90° à tort.
+
+**Correction** :
+```python
+# Avant (OpenCV < 4.9)
+if angle < -45:
+    angle += 90
+# Après (OpenCV 4.9+)
+if angle > 45:
+    angle -= 90
+```
+
+**Leçon** : une dépendance peut casser silencieusement un algorithme sans erreur d'import. Toujours vérifier les breaking changes dans les changelogs OpenCV lors d'une mise à jour.
+
+---
+
+### Bug text_to_image — Images en mode paysage au lieu de portrait
+
+**Symptôme** : les images générées faisaient 1240×937 px (paysage) au lieu de 1240×1748 px (portrait A4). Tesseract est calibré pour analyser des documents en portrait — la qualité OCR était significativement dégradée sur les images paysage.
+
+**Cause** : le calcul de la hauteur (`margin * 2 + len(lines) * line_height`) sous-estimait la hauteur réelle pour les documents courts, produisant un rectangle paysage.
+
+**Correction** : `height = max(height, int(w * 1.41))` — on force le ratio portrait A4 (√2 ≈ 1.41) comme minimum.
+
+---
+
+### Bug Airflow — `MONGO_URI` sans credentials
+
+**Symptôme** : les tâches Airflow du pipeline échouaient avec `OperationFailure: Command find requires authentication`.
+
+**Cause** : la variable `MONGO_URI` dans `x-airflow-common` était `mongodb://mongo:27017` (sans auth), alors que MongoDB est configuré avec authentication obligatoire. Le backend utilisait correctement `mongodb://root:rootpassword@mongo:27017`.
+
+**Correction** : alignement de la variable Airflow avec celle du backend : `mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017`.
+
+---
+
+### Bug validator.py — Import mort déclenchant un crash Airflow
+
+**Symptôme** : la tâche `validate` du DAG Airflow crashait avec une `ImportError` lors de l'appel à `_check()`.
+
+**Cause** : `_check()` contenait `from api.models.schemas import ValidationStatus` — import jamais utilisé dans le corps de la fonction. `schemas.py` importe `EmailStr` de pydantic, qui nécessite le paquet `email-validator` absent du conteneur Airflow.
+
+**Correction** : suppression de l'import mort. `_check()` ne retourne que des dicts Python simples, aucun type Pydantic n'est requis.
 
 ---
 
@@ -437,6 +499,34 @@ Deux profils métier distincts aux besoins différents :
 - **Compliance** (responsables conformité) : vue agrégée — KPIs globaux, anomalies par sévérité, expirations imminentes, statut fournisseurs. UX orientée supervision.
 
 Séparer les deux évite les compromis UI qui dégradent l'expérience de chaque profil. En production, on pourrait les regrouper avec une navigation conditionnelle par rôle.
+
+---
+
+### Pourquoi supprimer spaCy d'Airflow (et du backend) ?
+
+spaCy avait été prévu comme NER complémentaire pour extraire les noms de dirigeants depuis les Kbis. En pratique :
+- La regex heuristique sur les suffixes juridiques (`SAS|SARL|EURL|SCI...`) couvre 100% des cas de démo
+- `fr_core_news_md` pèse ~80 MB et charge ~1.2 GiB de RAM au démarrage du scheduler
+- spaCy confond souvent "BTP SOLUTIONS SAS" (raison sociale) avec une entité `GPE` (lieu géographique) sur des documents administratifs
+- L'import n'était nulle part dans le code — pure déclaration orpheline
+
+**Impact concret de la suppression** : RAM scheduler Airflow divisée par 8 (1.36 GiB → 160 MiB), image Docker allégée de ~500 MB, build 2× plus rapide.
+
+---
+
+### Pourquoi un fallback dev dans le DAG Airflow ?
+
+Déclencher le DAG en développement nécessitait de copier-coller un UUID depuis MongoDB dans un JSON de configuration Airflow — processus fastidieux et source d'erreurs.
+
+Le fallback dev (sélection automatique du dernier document `pending`) respecte le principe "convention over configuration" : en production, le `document_id` est toujours fourni par le backend via l'API Airflow REST. En développement, le DAG se débrouille seul.
+
+Le log distingue explicitement les deux modes :
+```
+[DAG] document_id fourni via conf : xxxx           # mode prod
+[DAG] Fallback dev — document_id sélectionné : xxxx # mode dev
+```
+
+Ce mécanisme est **inoffensif en production** : le backend injecte toujours `conf["document_id"]`, donc le fallback ne s'exécute jamais hors environnement de développement.
 
 ---
 

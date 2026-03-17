@@ -55,12 +55,61 @@ DEFAULT_ARGS = {
 # ─────────────────────────────────────────────────────────────
 
 def _get_document_id(context: dict) -> str:
-    """Extraire document_id depuis dag_run.conf."""
+    """
+    Extraire document_id depuis dag_run.conf.
+
+    Fallback dev : si aucun document_id fourni, récupère automatiquement
+    le document le plus récent en statut 'pending' (ou tout statut) depuis MongoDB.
+    Ce fallback est uniquement destiné aux tests locaux — en production, le
+    document_id est toujours injecté par le backend via l'API Airflow.
+    """
     conf = context["dag_run"].conf or {}
     document_id = conf.get("document_id")
-    if not document_id:
-        raise ValueError("dag_run.conf doit contenir 'document_id'")
-    return document_id
+
+    if document_id:
+        print(f"[DAG] document_id fourni via conf : {document_id}")
+        return document_id
+
+    # ── Fallback développement ────────────────────────────────
+    print("[DAG] Aucun document_id dans conf — fallback dev : recherche dans MongoDB")
+    try:
+        import pymongo
+
+        # Lire directement les env vars (évite d'importer api.config et ses dépendances FastAPI)
+        mongo_uri = os.environ.get("MONGO_URI", "mongodb://mongo:27017")
+        mongo_db = os.environ.get("MONGO_DB", "docplatform")
+
+        client = pymongo.MongoClient(mongo_uri)
+        db = client[mongo_db]
+
+        # Priorité : document pending (non encore traité)
+        doc = db.documents.find_one(
+            {"status": "pending"},
+            sort=[("upload_timestamp", pymongo.DESCENDING)],
+        )
+        # Sinon : n'importe quel document (pour re-tester)
+        if not doc:
+            doc = db.documents.find_one(
+                {},
+                sort=[("upload_timestamp", pymongo.DESCENDING)],
+            )
+        client.close()
+
+        if not doc:
+            raise ValueError("Fallback dev : aucun document trouvé dans MongoDB")
+
+        document_id = doc["document_id"]
+        print(
+            f"[DAG] Fallback dev — document_id sélectionné automatiquement : {document_id} "
+            f"(status={doc.get('status')}, type={doc.get('doc_type')}, "
+            f"fournisseur={doc.get('supplier_id')})"
+        )
+        return document_id
+
+    except Exception as e:
+        raise ValueError(
+            f"dag_run.conf doit contenir 'document_id' — fallback dev échoué : {e}"
+        ) from e
 
 
 def fn_preprocess_ocr(**context):
@@ -130,8 +179,13 @@ def fn_finalize(**context):
 def on_failure_callback(context):
     """Marquer le document en erreur dans MongoDB si le DAG échoue."""
     try:
+        # Priorité : conf explicite, sinon XCom (cas fallback dev)
         conf = context["dag_run"].conf or {}
         document_id = conf.get("document_id")
+        if not document_id:
+            ti = context.get("ti")
+            if ti:
+                document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
         if not document_id:
             return
 
@@ -173,7 +227,7 @@ Ce DAG traite un document administratif de bout en bout :
 
 1. **preprocess_ocr** : Preprocessing OpenCV adaptatif (7 stratégies) + OCR Tesseract multi-pass
 2. **classify** : Classification TF-IDF + Random Forest (6 types : FACTURE, DEVIS, SIRET, URSSAF, KBIS, RIB)
-3. **extract_fields** : Extraction regex + spaCy (SIRET, TVA, montants, dates, IBAN...)
+3. **extract_fields** : Extraction regex (SIRET, TVA, montants, dates, IBAN, raison sociale...)
 4. **validate** : Validation inter-documents, détection anomalies (expiration, incohérences SIRET, TVA)
 5. **finalize** : Stockage JSON structuré en zone curated MinIO
 
@@ -196,7 +250,7 @@ Ce DAG traite un document administratif de bout en bout :
     extract_fields = PythonOperator(
         task_id="extract_fields",
         python_callable=fn_extract_fields,
-        doc_md="Extraction regex + spaCy : SIRET, TVA, montants, dates, IBAN",
+        doc_md="Extraction regex : SIRET, TVA, montants, dates, IBAN, raison sociale",
     )
 
     validate = PythonOperator(

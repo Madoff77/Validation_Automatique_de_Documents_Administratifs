@@ -1,5 +1,5 @@
 """
-Extracteur de champs métier hybride : Regex + spaCy NER.
+Extracteur de champs métier par regex.
 
 Principes de robustesse OCR :
 - Les patterns regex tolèrent les espaces parasites (ex: "123 456 789 01234" = SIRET)
@@ -126,7 +126,7 @@ _RE_BANQUE = re.compile(
     re.IGNORECASE
 )
 
-# ── Raison sociale (heuristique avant spaCy) ─────────────────
+# ── Raison sociale (heuristique sur suffixes juridiques français) ────────────
 _RE_RAISON_SOCIALE = re.compile(
     r'\b([A-ZÀÂÉÈÊÙÛÇ][A-Za-zÀ-ÿ\s\-&]{2,50}(?:SAS|SA|SARL|EURL|SNC|SCI|SASU|EI|EIRL|SCP|GIE|GIP|SELARL))\b'
     r'|'
