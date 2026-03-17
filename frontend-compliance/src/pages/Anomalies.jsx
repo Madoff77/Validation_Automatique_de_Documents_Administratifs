@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle, Filter, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Filter, RefreshCw, X, Eye } from 'lucide-react'
 import { anomaliesApi } from '../api/index'
+import DocumentViewer from '../components/DocumentViewer'
 import { usePermissions } from '../hooks/usePermissions'
 import { formatDistanceToNow, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -34,6 +35,7 @@ export default function Anomalies() {
   const qc = useQueryClient()
   const [filters, setFilters] = useState({ severity: '', type: '', resolved: false })
   const [showResolved, setShowResolved] = useState(false)
+  const [viewerDocId, setViewerDocId] = useState(null)
 
   const { data: anomalies = [], isLoading, refetch } = useQuery({
     queryKey: ['anomalies', filters, showResolved],
@@ -159,6 +161,7 @@ export default function Anomalies() {
                     anomaly={anomaly}
                     onResolve={() => resolveMutation.mutate({ id: anomaly.anomaly_id })}
                     resolving={resolveMutation.isPending}
+                    onViewDocument={setViewerDocId}
                   />
                 ))}
               </div>
@@ -166,13 +169,16 @@ export default function Anomalies() {
           ))}
         </div>
       )}
+      {viewerDocId && <DocumentViewer documentId={viewerDocId} onClose={() => setViewerDocId(null)} />}
     </div>
   )
 }
 
-function AnomalyRow({ anomaly, onResolve, resolving }) {
+function AnomalyRow({ anomaly, onResolve, resolving, onViewDocument }) {
   const [expanded, setExpanded] = useState(false)
   const { canResolveAnomaly } = usePermissions()
+
+  const docId = anomaly.details?.document_id || anomaly.document_id
 
   return (
     <div className="px-5 py-4">
@@ -200,16 +206,24 @@ function AnomalyRow({ anomaly, onResolve, resolving }) {
             </div>
           )}
         </div>
-        {!anomaly.resolved && canResolveAnomaly && (
-          <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {docId && (
+            <button
+              onClick={() => onViewDocument(docId)}
+              className="text-xs text-gray-600 hover:text-gray-900 font-medium px-2 py-1 flex items-center gap-1 rounded bg-gray-100 hover:bg-gray-200"
+            >
+              <Eye size={14} /> Document
+            </button>
+          )}
+          {!anomaly.resolved && canResolveAnomaly && (
             <button
               onClick={() => setExpanded(!expanded)}
               className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded-xs border border-primary-200 hover:bg-primary-50"
             >
               {expanded ? 'Annuler' : 'Résoudre'}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {expanded && (
