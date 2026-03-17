@@ -59,7 +59,10 @@ services:
       - mongo_data:/data/db
       - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping')\" > /dev/null 2>&1"]
+      test: [
+        "CMD-SHELL",
+        "mongosh \"mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASSWORD:-rootpassword}@localhost:27017/admin?authSource=admin\" --quiet --eval \"db.adminCommand('ping').ok\" | grep 1"
+      ]
       interval: 15s
       timeout: 5s
       retries: 5
