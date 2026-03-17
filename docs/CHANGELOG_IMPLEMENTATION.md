@@ -623,10 +623,56 @@ Ajout de `make reset-docs` : remet tous les documents MongoDB en statut `pending
 
 ---
 
+## [2026-03-17] — BUGFIX : Extraction champs — HT/TVA incorrects sur factures réelles
+
+### Symptôme
+Sur une facture nette scannée (PDF) uploadée dans le CRM, le montant TTC était correctement extrait mais les montants HT et TVA étaient complètement faux ("improvisés").
+
+### Causes racines (3 facteurs cumulatifs)
+
+**1. `_RE_MONTANT_HT` trop permissif — `ht\s*:?`**
+Le pattern contenait l'alternative `ht\s*:?` (HT sans contexte obligatoire). Sur une facture en tableau, cette alternative matchait le premier "HT" trouvé dans le texte — souvent un **en-tête de colonne** (`Prix Unitaire HT`, `Montant HT`) avant la ligne de total. Le montant extrait correspondait alors au prix d'une ligne article, pas au total HT.
+
+**2. Déduction croisée sans validation — TVA inventée**
+Une fois HT extrait avec une valeur incorrecte, la déduction `tva = ttc - ht` produisait une TVA incohérente. Aucune vérification de cohérence du taux n'existait → n'importe quelle valeur était acceptée.
+
+**3. `_tesseract_single` détruisait la structure ligne**
+`" ".join(words)` — tous les mots de la page joints avec des espaces, sans sauts de ligne. Les en-têtes de colonnes du tableau et les lignes de total se retrouvaient dans le même flux de texte → les regex ne pouvaient pas distinguer les deux.
+
+### Corrections
+
+**`backend/pipeline/ocr/extractor.py`** — `_tesseract_single`
+- Les mots sont désormais groupés par ligne physique via `(block_num, par_num, line_num)` depuis les données `image_to_data`
+- Reconstruction : `"\n".join(...)` au lieu de `" ".join(...)` — sauts de ligne préservés entre chaque ligne du document
+
+**`backend/pipeline/extraction/field_extractor.py`** — `_RE_MONTANT_HT`
+- Suppression de `ht\s*:?` (alternative trop permissive — matchait les en-têtes de colonnes)
+- Suppression de `prix\s+ht` (matchait "Prix Unitaire HT" en en-tête de tableau)
+- Ajout de `sous.?total\s+ht` (couvre "Sous-total HT", "Sous total HT")
+- Remplacement de `ht\s*:?` → `\bht\s*:` (deux-points **obligatoire** + word boundary, pour couvrir les labels "HT : 200,00")
+
+**`backend/pipeline/extraction/field_extractor.py`** — déduction croisée
+- Ajout de `_tva_rate_plausible(ht, tva)` : la déduction `tva = ttc - ht` ou `ht = ttc - tva` n'est validée que si le taux TVA implicite est à ±2% d'un taux légal français (20%, 10%, 8.5%, 5.5%, 2.1%)
+- Si HT a été mal extrait, le taux résultant sera incohérent → la déduction est annulée (None) plutôt que propagée
+
+### Fichiers modifiés
+| Fichier | Changement |
+|---|---|
+| `backend/pipeline/ocr/extractor.py` | `_tesseract_single` : reconstruction texte ligne par ligne (préserve `\n`) |
+| `backend/pipeline/extraction/field_extractor.py` | `_RE_MONTANT_HT` révisé + `_tva_rate_plausible()` + déduction conditionnelle |
+
+### Impact
+- HT extrait depuis la **ligne total** et non depuis un en-tête de colonne ✓
+- TVA déduite uniquement si le taux implicite est légalement cohérent ✓
+- PDF natifs non affectés (pdfplumber préserve déjà les sauts de ligne)
+
+---
+
 ## TODO — Prochaines étapes immédiates
 - [x] Entraînement modèle classifier (F1=1.000, 2801 features)
 - [x] Seed script avec données démo cohérentes (11 documents, mix PDF/images)
 - [x] Pipeline Airflow end-to-end fonctionnel
 - [x] Documentation JURY_DEFENSE.md complète
 - [x] Nettoyage dépendances inutilisées (boto3, pypdf, aiofiles, requests, recharts)
-- [ ] Vérification end-to-end DAG Airflow (5 tâches vertes en UI)
+- [x] Correction extraction HT/TVA sur factures réelles (regex + structure Tesseract)
+- [x] Vérification end-to-end DAG Airflow (5 tâches vertes en UI)

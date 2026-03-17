@@ -46,8 +46,11 @@ _RE_TVA = re.compile(
 _AMOUNT_PATTERN = r'([\d\s]{1,10}[,.]?\d{0,2})\s*(?:€|EUR|euros?)?'
 
 # Contexte HT (Hors Taxes)
+# NOTE : on exclut volontairement les alternatives trop permissives comme "ht\s*:?"
+# ou "prix\s+ht" (correspond aux en-têtes de colonnes "Prix Unitaire HT" dans les tableaux).
+# "\bht\s*:" (avec deux-points obligatoire) couvre les labels "HT : 200,00".
 _RE_MONTANT_HT = re.compile(
-    r'(?:total\s+ht|montant\s+ht|ht\s*:?|base\s+ht|prix\s+ht|net\s+ht)[^\d]{0,20}' + _AMOUNT_PATTERN,
+    r'(?:total\s+ht|montant\s+ht|sous.?total\s+ht|base\s+ht|net\s+ht|\bht\s*:)[^\d]{0,20}' + _AMOUNT_PATTERN,
     re.IGNORECASE
 )
 # Contexte TTC (Toutes Taxes Comprises)
@@ -253,22 +256,43 @@ def _extract_tva_number(text: str) -> Optional[str]:
     return None
 
 
+def _tva_rate_plausible(ht: float, tva: float) -> bool:
+    """
+    Vérifie que le taux TVA implicite (tva/ht) est proche d'un taux légal français.
+    Évite de valider des déductions croisées quand HT a été mal extrait.
+    Taux légaux : 20%, 10%, 8.5%, 5.5%, 2.1%
+    """
+    if ht <= 0 or tva <= 0:
+        return False
+    rate = (tva / ht) * 100
+    for legal in (20.0, 10.0, 8.5, 5.5, 2.1):
+        if abs(rate - legal) <= 2.0:
+            return True
+    return False
+
+
 def _extract_montants(text: str) -> Tuple[Optional[float], Optional[float], Optional[float]]:
     """
     Extraire HT, TVA (montant), TTC.
-    Si certains sont manquants, tenter de les déduire des autres + taux.
+    Si certains sont manquants, tenter de les déduire des autres.
+    La déduction n'est appliquée que si le taux TVA résultant est cohérent
+    avec les taux légaux français (évite de propager un HT mal extrait).
     """
     ht = _parse_amount(_first_match(_RE_MONTANT_HT, text))
     tva_amount = _parse_amount(_first_match(_RE_MONTANT_TVA, text))
     ttc = _parse_amount(_first_match(_RE_MONTANT_TTC, text))
 
-    # Déductions croisées
+    # Déductions croisées — avec vérification de cohérence TVA
     if ht and tva_amount and not ttc:
         ttc = round(ht + tva_amount, 2)
     elif ht and ttc and not tva_amount:
-        tva_amount = round(ttc - ht, 2)
+        deduced = round(ttc - ht, 2)
+        if deduced > 0 and _tva_rate_plausible(ht, deduced):
+            tva_amount = deduced
     elif tva_amount and ttc and not ht:
-        ht = round(ttc - tva_amount, 2)
+        deduced = round(ttc - tva_amount, 2)
+        if deduced > 0 and _tva_rate_plausible(deduced, tva_amount):
+            ht = deduced
 
     return ht, tva_amount, ttc
 
