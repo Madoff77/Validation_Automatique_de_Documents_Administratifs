@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FileText, Search, Filter, Upload } from 'lucide-react'
 import { documentsApi } from '../api/documents'
 import { DocStatusBadge, DocTypeBadge } from '../components/StatusBadge'
+import { usePermissions } from '../hooks/usePermissions'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -13,6 +14,7 @@ const STATUSES = ['pending', 'preprocessing', 'ocr_done', 'classified', 'extract
 export default function Documents() {
   const [filters, setFilters] = useState({ doc_type: '', status: '' })
   const [search, setSearch] = useState('')
+  const { canUpload } = usePermissions()
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['documents', filters],
@@ -35,9 +37,11 @@ export default function Documents() {
           <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
           <p className="text-sm text-gray-500 mt-0.5">{filtered.length} document{filtered.length > 1 ? 's' : ''}</p>
         </div>
-        <Link to="/upload" className="btn-primary">
-          <Upload size={16} /> Importer
-        </Link>
+        {canUpload && (
+          <Link to="/upload" className="btn-primary">
+            <Upload size={16} /> Importer
+          </Link>
+        )}
       </div>
 
       {/* Filtres */}

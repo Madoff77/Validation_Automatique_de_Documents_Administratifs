@@ -170,7 +170,7 @@ VENDEUR (Émetteur)
 {vendor['address']}
 SIRET : {displayed_siret}
 N° TVA Intracommunautaire : {vendor['tva']}
-Tél : {vendor['phone']} — Email : {vendor['email']}
+Tél : {vendor['phone']} - Email : {vendor['email']}
 
 ACHETEUR (Client)
 {client['name']}
@@ -245,7 +245,7 @@ PRESTATIONS PROPOSÉES
     for i in range(n_items):
         unit_ht = item_ht + round(random.uniform(-50, 50), 2)
         text += f"• {fake.bs().title()}\n"
-        text += f"  Quantité : {random.randint(1, 10)} — Prix unitaire HT : {unit_ht:.2f} €\n\n"
+        text += f"  Quantité : {random.randint(1, 10)} - Prix unitaire HT : {unit_ht:.2f} €\n\n"
 
     text += f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -451,8 +451,8 @@ COORDONNÉES BANCAIRES
 IBAN : {company['iban']}
 BIC (SWIFT) : {company['bic']}
 
-Domiciliation : {random.choice(['BNP Paribas', 'Société Générale', 'Crédit Agricole',
-                                  'LCL', 'Banque Populaire', 'Caisse d\'Épargne', 'CIC'])}
+Domiciliation : {random.choice(["BNP Paribas", "Société Générale", "Crédit Agricole",
+                                  "LCL", "Banque Populaire", "Caisse d'Épargne", "CIC"])}
 Agence : {fake.city()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -488,10 +488,11 @@ def _text_to_pdf(text: str, title: str = "Document") -> Optional[bytes]:
         # Police par défaut (Helvetica supporte les caractères courants)
         pdf.set_font("Helvetica", size=9)
 
-        # Titre en haut
+        # Titre en haut (sanitiser pour latin-1)
         pdf.set_font("Helvetica", style="B", size=11)
         pdf.set_text_color(40, 40, 120)
-        pdf.cell(0, 8, txt=title, ln=True, align="C")
+        safe_title = title.encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(0, 8, txt=safe_title, ln=True, align="C")
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", size=8.5)
         pdf.ln(3)
@@ -628,6 +629,8 @@ def text_to_image(text: str, width: int = 1240, dpi_scale: float = 1.0) -> np.nd
 
     lines = text.split('\n')
     height = margin * 2 + len(lines) * line_height + 40
+    # Garantir l'orientation portrait (ratio A4 ≈ 1.41)
+    height = max(height, int(w * 1.41))
 
     img = PILImage.new("RGB", (w, height), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)

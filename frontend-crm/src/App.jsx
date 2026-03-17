@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
+import { usePermissions } from './hooks/usePermissions'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -19,6 +20,19 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />
 }
 
+function OperatorRoute({ children }) {
+  const { canUpload } = usePermissions()
+  if (!canUpload) return (
+    <div className="p-12 text-center">
+      <p className="text-4xl mb-4">🔒</p>
+      <h2 className="text-xl font-semibold text-gray-800 mb-2">Accès non autorisé</h2>
+      <p className="text-gray-500 text-sm">Votre rôle ne permet pas d'accéder à cette page.</p>
+      <Navigate to="/dashboard" replace />
+    </div>
+  )
+  return children
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -29,7 +43,7 @@ export default function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="suppliers/:id" element={<SupplierDetail />} />
-          <Route path="upload" element={<Upload />} />
+          <Route path="upload" element={<OperatorRoute><Upload /></OperatorRoute>} />
           <Route path="documents" element={<Documents />} />
           <Route path="documents/:id" element={<DocumentDetail />} />
         </Route>

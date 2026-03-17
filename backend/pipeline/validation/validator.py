@@ -40,7 +40,6 @@ EXPIRATION_WARNING_DAYS = 30
 def _check(rule: str, ok: bool, message_ok: str, message_fail: str,
            severity: str = "error", details: Optional[dict] = None) -> dict:
     """Construire un ValidationCheck dict."""
-    from api.models.schemas import ValidationStatus
     return {
         "rule": rule,
         "status": "ok" if ok else severity,

@@ -37,8 +37,10 @@ _classifier: Optional[DocumentClassifier] = None
 def _get_classifier() -> DocumentClassifier:
     global _classifier
     if _classifier is None:
+        logger.info("classifier_loading", model_path="/app/models/trained/classifier.joblib")
         _classifier = DocumentClassifier()
-        _classifier.load()
+        loaded = _classifier.load()
+        logger.info("classifier_ready", loaded=loaded, fallback="keyword_rules" if not loaded else "ml_model")
     return _classifier
 
 
@@ -133,6 +135,9 @@ def task_ocr(document_id: str) -> dict:
 
 def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
     """Classifier le type de document."""
+    t_start = time.time()
+    logger.info("task_classify_start", document_id=document_id)
+
     db = _get_db()
 
     if not ocr_text:
@@ -147,6 +152,7 @@ def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
         )
         return {"document_id": document_id, "doc_type": "UNKNOWN", "confidence": 0.0}
 
+    logger.info("task_classify_predicting", document_id=document_id, text_length=len(ocr_text))
     classifier = _get_classifier()
     doc_type, confidence, all_probs = classifier.predict(ocr_text)
 
@@ -160,7 +166,8 @@ def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
         }}
     )
 
-    logger.info("task_classify_done", document_id=document_id, doc_type=doc_type, confidence=round(confidence, 2))
+    duration_ms = int((time.time() - t_start) * 1000)
+    logger.info("task_classify_done", document_id=document_id, doc_type=doc_type, confidence=round(confidence, 2), duration_ms=duration_ms)
     return {"document_id": document_id, "doc_type": doc_type, "confidence": confidence}
 
 
@@ -170,6 +177,7 @@ def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
 
 def task_extract(document_id: str, doc_type: Optional[str] = None, ocr_text: Optional[str] = None) -> dict:
     """Extraire les champs structurés du texte OCR."""
+    logger.info("task_extract_start", document_id=document_id, doc_type=doc_type)
     db = _get_db()
     doc = db.documents.find_one({"document_id": document_id})
 
@@ -204,8 +212,12 @@ def task_extract(document_id: str, doc_type: Optional[str] = None, ocr_text: Opt
 
 def task_validate(document_id: str) -> dict:
     """Valider le document et détecter les anomalies inter-documents."""
+    logger.info("task_validate_start", document_id=document_id)
     db = _get_db()
     doc = db.documents.find_one({"document_id": document_id})
+
+    if not doc:
+        raise ValueError(f"Document {document_id} introuvable pour la validation")
 
     supplier_id = doc["supplier_id"]
 
@@ -269,8 +281,12 @@ def task_validate(document_id: str) -> dict:
 
 def task_finalize(document_id: str) -> dict:
     """Stocker les données structurées finales en zone curated."""
+    logger.info("task_finalize_start", document_id=document_id)
     db = _get_db()
     doc = db.documents.find_one({"document_id": document_id})
+
+    if not doc:
+        raise ValueError(f"Document {document_id} introuvable pour la finalisation")
 
     curated_path = f"{document_id}/data.json"
     curated_data = {

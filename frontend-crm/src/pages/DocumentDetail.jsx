@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, RefreshCw, Download, AlertTriangle, CheckCircle,
-  Info, Loader2, FileText, Building2, Calendar, CreditCard, Euro,
+  Info, Loader2, FileText, Building2, Calendar, CreditCard, Euro, Eye, X,
 } from 'lucide-react'
 import { documentsApi } from '../api/documents'
 import { DocStatusBadge, DocTypeBadge, ValidationBadge } from '../components/StatusBadge'
@@ -44,9 +45,67 @@ function CheckRow({ check }) {
 
 const formatAmount = (v) => v != null ? `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` : null
 
+function DocumentViewer({ docId, mimeType, onClose }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['document-view-url', docId],
+    queryFn: () => documentsApi.getViewUrl(docId),
+    staleTime: 50 * 60 * 1000, // 50 min (URL valide 1h)
+  })
+
+  const isImage = mimeType?.startsWith('image/')
+  const isPdf = mimeType === 'application/pdf'
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-4xl max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-3 border-b">
+          <span className="font-semibold text-gray-800 text-sm">{data?.filename || 'Document'}</span>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={18} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden min-h-0">
+          {isLoading && (
+            <div className="flex items-center justify-center h-64 gap-3 text-gray-500">
+              <Loader2 size={20} className="animate-spin" /> Chargement…
+            </div>
+          )}
+          {isError && (
+            <div className="flex items-center justify-center h-64 text-red-500 text-sm">
+              Impossible de charger le document.
+            </div>
+          )}
+          {data?.url && isPdf && (
+            <iframe
+              src={data.url}
+              title="Document PDF"
+              className="w-full h-full min-h-[70vh] border-0"
+            />
+          )}
+          {data?.url && isImage && (
+            <div className="flex items-center justify-center p-4 h-full overflow-auto">
+              <img
+                src={data.url}
+                alt="Document"
+                className="max-w-full max-h-[75vh] object-contain rounded"
+              />
+            </div>
+          )}
+          {data?.url && !isPdf && !isImage && (
+            <div className="flex items-center justify-center h-64 text-gray-500 text-sm">
+              Aperçu non disponible pour ce type de fichier.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DocumentDetail() {
   const { id } = useParams()
   const qc = useQueryClient()
+  const [showViewer, setShowViewer] = useState(false)
 
   const { data: doc, isLoading } = useQuery({
     queryKey: ['document', id],
@@ -116,6 +175,9 @@ export default function DocumentDetail() {
               Relancer
             </button>
           )}
+          <button onClick={() => setShowViewer(true)} className="btn-secondary">
+            <Eye size={15} /> Visualiser
+          </button>
           <a
             href={documentsApi.getDownloadUrl(id)}
             target="_blank" rel="noopener noreferrer"
@@ -248,6 +310,14 @@ export default function DocumentDetail() {
           )}
         </div>
       </div>
+
+      {showViewer && (
+        <DocumentViewer
+          docId={id}
+          mimeType={doc.mime_type}
+          onClose={() => setShowViewer(false)}
+        />
+      )}
     </div>
   )
 }

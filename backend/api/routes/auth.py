@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 from api.models.schemas import (
@@ -39,13 +39,12 @@ async def login(
     refresh_token = create_refresh_token(token_data)
 
     # Persister le refresh token
+    now_utc = datetime.now(timezone.utc)
     await db.refresh_tokens.insert_one({
         "token": refresh_token,
         "user_id": user["user_id"],
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc).replace(
-            day=datetime.now(timezone.utc).day + settings.refresh_token_expire_days
-        ),
+        "created_at": now_utc,
+        "expires_at": now_utc + timedelta(days=settings.refresh_token_expire_days),
     })
 
     await db.users.update_one(
@@ -85,14 +84,13 @@ async def refresh_token(
     new_refresh_token = create_refresh_token(token_data)
 
     # Rotation du refresh token
+    now_utc = datetime.now(timezone.utc)
     await db.refresh_tokens.delete_one({"token": body.refresh_token})
     await db.refresh_tokens.insert_one({
         "token": new_refresh_token,
         "user_id": user_id,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc).replace(
-            day=datetime.now(timezone.utc).day + settings.refresh_token_expire_days
-        ),
+        "created_at": now_utc,
+        "expires_at": now_utc + timedelta(days=settings.refresh_token_expire_days),
     })
 
     return TokenResponse(

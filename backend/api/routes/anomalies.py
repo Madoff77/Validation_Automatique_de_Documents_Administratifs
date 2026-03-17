@@ -128,7 +128,7 @@ async def get_expiring_soon(
     current_user: dict = Depends(require_viewer),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    """Documents avec date d'expiration dans les N prochains jours."""
+    """Documents avec date d'expiration — filtre date côté frontend via details.expiration_date."""
     anomalies = await db.anomalies.find({
         "type": {"$in": ["DATE_EXPIRED", "KBIS_EXPIRED", "URSSAF_EXPIRED"]},
         "resolved": False,
