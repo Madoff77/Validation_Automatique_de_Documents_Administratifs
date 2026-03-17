@@ -43,9 +43,7 @@ train:
 
 reset-docs:
 	@echo "Remise en pending de tous les documents (pour test Airflow end-to-end)..."
-	docker compose exec -T mongo mongosh \
-	  "mongodb://root:rootpassword@localhost:27017/docplatform?authSource=admin" \
-	  --eval 'db.documents.updateMany({}, {$$set: {status: "pending", error_message: null}})'
+	docker compose exec -T mongo mongosh "mongodb://root:rootpassword@localhost:27017/docplatform?authSource=admin" --eval "db.documents.updateMany({}, {`$set: {status: 'pending', error_message: null}})"
 	@echo "Tous les documents sont en 'pending'. Déclenchez le DAG depuis l'UI Airflow."
 
 demo:
