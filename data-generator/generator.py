@@ -21,47 +21,84 @@ import random
 import argparse
 from pathlib import Path
 from datetime import date, timedelta
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from faker import Faker
 from PIL import Image, ImageFilter, ImageEnhance
 import cv2
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_KEY = os.getenv("INSEE_API_KEY")
+if not API_KEY:
+    print("Clé API SIRENE non trouvée. Veuillez définir INSEE_API_KEY dans votre .env.")
 
 fake = Faker("fr_FR")
 Faker.seed(42)
 random.seed(42)
 np.random.seed(42)
 
-# ─────────────────────────────────────────────────────────────
-# GÉNÉRATION SIRET VALIDE (Luhn)
-# ─────────────────────────────────────────────────────────────
+def fetch_sirene_companies(n_companies: int = 100) -> list:
+    """
+    Récupère un lot d'entreprises réelles actives via l'API SIRENE.
+    """
+    print(f"Récupération de {n_companies} entreprises depuis l'API SIRENE...")
+    url = "https://api.insee.fr/api-sirene/3.11/siret"
+    headers = {
+        "X-INSEE-Api-Key-Integration": API_KEY,
+        "Accept": "application/json"
+    }
 
-def _gen_valid_siret() -> str:
-    """Générer un SIRET de 14 chiffres passant le contrôle Luhn."""
-    while True:
-        digits = [random.randint(0, 9) for _ in range(13)]
-        total = 0
-        for i, d in enumerate(reversed(digits)):
-            n = d * 2 if i % 2 == 0 else d
-            if n > 9:
-                n -= 9
-            total += n
-        check = (10 - (total % 10)) % 10
-        siret = ''.join(map(str, digits)) + str(check)
-        # Vérifier qu'on ne commence pas par 0 (non valide)
-        if siret[0] != '0':
-            return siret
+    params = {
+        "q": "periode(etatAdministratifEtablissement:A)",
+        "nombre": min(n_companies, 1000),
+    }
 
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Erreur lors de l'appel à l'API SIRENE : {e}")
+        return []
 
-def _siret_to_siren(siret: str) -> str:
-    return siret[:9]
+    real_companies = []
+    for etab in data.get("etablissements", []):
+        unite = etab.get("uniteLegale", {})
+        adresse = etab.get("adresseEtablissement", {})
 
+        name = unite.get("denominationUniteLegale") or \
+               unite.get("denominationUsuelle1UniteLegale") or \
+               f"{unite.get('nomUniteLegale', '')} {unite.get('prenom1UniteLegale', '')}".strip()
+        name = name.upper() if name else "ENTREPRISE INCONNUE"
+
+        num = adresse.get("numeroVoieEtablissement", "")
+        type_voie = adresse.get("typeVoieEtablissement", "")
+        lib = adresse.get("libelleVoieEtablissement", "")
+        cp = adresse.get("codePostalEtablissement", "")
+        ville = adresse.get("libelleCommuneEtablissement", "")
+
+        street = " ".join([p for p in [num, type_voie, lib] if p])
+        full_address = f"{street}, {cp} {ville}".strip(", ")
+
+        real_companies.append({
+            "name": name,
+            "siret": etab.get("siret"),
+            "siren": etab.get("siren"),
+            "address": full_address
+        })
+
+    print(f"{len(real_companies)} entreprises récupérées avec succès.")
+    return real_companies
+
+REAL_COMPANIES_POOL = []
 
 def _siren_to_tva(siren: str) -> str:
     key = (12 + 3 * (int(siren) % 97)) % 97
     return f"FR{key:02d}{siren}"
-
 
 def _gen_iban() -> str:
     bank = f"{random.randint(10000, 99999)}"
@@ -97,20 +134,25 @@ def _gen_date_expired(days_min: int = 1, days_max: int = 180) -> str:
     d = date.today() - timedelta(days=random.randint(days_min, days_max))
     return d.strftime("%d/%m/%Y")
 
-
 def _gen_company() -> dict:
-    """Générer une entreprise complète avec tous les identifiants."""
-    suffixes = ["SAS", "SARL", "SA", "EURL", "SNC", "SASU"]
-    name = fake.company().upper().split(",")[0] + " " + random.choice(suffixes)
-    siret = _gen_valid_siret()
-    siren = _siret_to_siren(siret)
-    tva = _siren_to_tva(siren)
+    """Générer une entreprise complète avec tous les identifiants basés sur l'API."""
+    global REAL_COMPANIES_POOL
+    
+    if not REAL_COMPANIES_POOL:
+        fetched_companies = fetch_sirene_companies(n_companies=200)
+        if not fetched_companies:
+            raise RuntimeError("Impossible de récupérer des données SIRENE. Vérifiez votre clé API ou votre réseau.")
+        REAL_COMPANIES_POOL = fetched_companies
+
+    base_data = random.choice(REAL_COMPANIES_POOL)
+    siren = base_data["siren"]
+
     return {
-        "name": name,
-        "siret": siret,
+        "name": base_data["name"],
+        "siret": base_data["siret"],
         "siren": siren,
-        "tva": tva,
-        "address": f"{fake.building_number()} {fake.street_name()}, {fake.postcode()} {fake.city()}",
+        "tva": _siren_to_tva(siren),
+        "address": base_data["address"],
         "email": fake.company_email(),
         "phone": fake.phone_number(),
         "iban": _gen_iban(),
@@ -119,7 +161,6 @@ def _gen_company() -> dict:
         "tribunal": random.choice(["Paris", "Lyon", "Marseille", "Bordeaux", "Nantes", "Lille", "Toulouse"]),
         "rcs": f"RCS {random.choice(['Paris', 'Lyon', 'Marseille'])} {siren[:3]} {siren[3:6]} {siren[6:]}",
     }
-
 
 def _gen_amounts(base_min: float = 500, base_max: float = 50000) -> dict:
     ht = round(random.uniform(base_min, base_max), 2)
@@ -155,7 +196,7 @@ def _text_facture(vendor: dict = None, client: dict = None, anomaly: str = None)
     # Anomalie volontaire : SIRET différent
     displayed_siret = vendor["siret"]
     if anomaly == "bad_siret":
-        displayed_siret = _gen_valid_siret()
+        displayed_siret = _gen_company()["siret"]
 
     text = f"""FACTURE
 
@@ -182,7 +223,7 @@ SIRET : {client['siret']}
 DÉSIGNATION                                    MONTANT HT
 
 """
-    for i, (line, item_ht) in enumerate(zip(lines, items_ht)):
+    for _, (line, item_ht) in enumerate(zip(lines, items_ht)):
         text += f"{line:<45} {item_ht:>10.2f} €\n"
 
     text += f"""
@@ -242,7 +283,7 @@ PRESTATIONS PROPOSÉES
 """
     n_items = random.randint(2, 5)
     item_ht = round(amounts["ht"] / n_items, 2)
-    for i in range(n_items):
+    for _ in range(n_items):
         unit_ht = item_ht + round(random.uniform(-50, 50), 2)
         text += f"• {fake.bs().title()}\n"
         text += f"  Quantité : {random.randint(1, 10)} — Prix unitaire HT : {unit_ht:.2f} €\n\n"
@@ -281,7 +322,7 @@ def _text_urssaf(company: dict = None, expired: bool = False, anomaly: str = Non
 
     displayed_siret = company["siret"]
     if anomaly == "bad_siret":
-        displayed_siret = _gen_valid_siret()
+        displayed_siret = _gen_company()["siret"]
 
     text = f"""ATTESTATION DE VIGILANCE
 
@@ -337,7 +378,7 @@ def _text_kbis(company: dict = None, expired: bool = False, anomaly: str = None)
 
     displayed_siret = company["siret"]
     if anomaly == "bad_siret":
-        displayed_siret = _gen_valid_siret()
+        displayed_siret = _gen_company()["siret"]
 
     text = f"""EXTRAIT Kbis
 
@@ -395,7 +436,7 @@ def _text_attestation_siret(company: dict = None, anomaly: str = None) -> str:
 
     displayed_siret = company["siret"]
     if anomaly == "bad_siret":
-        displayed_siret = _gen_valid_siret()
+        displayed_siret = _gen_company()["siret"]
 
     text = f"""ATTESTATION DE SITUATION AU RÉPERTOIRE SIRENE
 
@@ -706,7 +747,7 @@ def generate_demo_documents(output_dir: str = "data/demo") -> list:
     company["name"] = "BTP SOLUTIONS SAS"
     # Entreprise avec SIRET différent pour anomalie
     bad_company = dict(company)
-    bad_company["siret"] = _gen_valid_siret()
+    bad_company["siret"] = _gen_company()["siret"]
 
     scenarios = [
         ("facture_ok",            "FACTURE", company,     None,       "high_quality",   0.1),
@@ -724,10 +765,6 @@ def generate_demo_documents(output_dir: str = "data/demo") -> list:
     created = []
     for name, doc_type, comp, anomaly, degradation, severity in scenarios:
         text = _TEXT_GENERATORS[doc_type](anomaly=anomaly)
-
-        # Remplacer le SIRET généré par celui de la company demo
-        if comp is company:
-            text = text.replace(company["siret"], company["siret"])  # no-op (cohérent)
 
         # Sauvegarder le texte brut
         txt_path = os.path.join(output_dir, f"{name}.txt")
@@ -779,22 +816,19 @@ def generate_demo_documents(output_dir: str = "data/demo") -> list:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Générateur de documents synthétiques")
-    parser.add_argument("--mode", choices=["training", "demo", "pdf", "image"],
-                        default="demo", help="Mode de génération")
-    parser.add_argument("--n-per-class", type=int, default=150,
-                        help="Nombre de documents par classe (mode training)")
-    parser.add_argument("--doc-type", choices=DOC_TYPES,
-                        help="Type de document (mode pdf/image)")
-    parser.add_argument("--n", type=int, default=5,
-                        help="Nombre de documents (mode pdf/image)")
+    parser.add_argument("--mode", choices=["training", "demo", "pdf", "image"], default="demo", help="Mode de génération")
+    parser.add_argument("--n-per-class", type=int, default=150, help="Nombre de documents par classe (mode training)")
+    parser.add_argument("--doc-type", choices=DOC_TYPES, help="Type de document (mode pdf/image)")
+    parser.add_argument("--n", type=int, default=5, help="Nombre de documents (mode pdf/image)")
     parser.add_argument("--output", default="data/output", help="Dossier de sortie")
-    parser.add_argument("--degradation",
-                        choices=["none", "blur", "rotation", "noise", "combined", "high_quality"],
-                        default="none", help="Type de dégradation (mode image)")
-    parser.add_argument("--severity", type=float, default=0.5,
-                        help="Sévérité dégradation 0.0-1.0")
+    parser.add_argument("--degradation", choices=["none", "blur", "rotation", "noise", "combined", "high_quality"], default="none", help="Type de dégradation (mode image)")
+    parser.add_argument("--severity", type=float, default=0.5, help="Sévérité dégradation 0.0-1.0")
+    parser.add_argument("--insee-api-key", help="Clé API pour récupérer des entreprises réelles (optionnel)")
     args = parser.parse_args()
 
+    if args.insee_api_key:
+        API_KEY = args.insee_api_key
+    
     Path(args.output).mkdir(parents=True, exist_ok=True)
 
     if args.mode == "training":

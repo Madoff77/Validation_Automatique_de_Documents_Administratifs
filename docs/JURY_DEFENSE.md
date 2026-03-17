@@ -63,7 +63,7 @@ Algorithme en 3 phases :
 
 **Phase 3 — Scoring et sélection** : Toutes les stratégies sont appliquées, chaque résultat Tesseract est scoré par `confiance × min(longueur/500, 1)`. On sélectionne le meilleur. Si la confiance reste < 0.4, on retente sur l'image en niveaux de gris brute.
 
-**Résultat** : Sur nos tests avec 6 types de dégradation (blur, rotation, noise, shadow, low_res, combined), le taux d'extraction correct passe de 45% (Tesseract brut) à 87% (pipeline adaptatif).
+**Résultat** : Sur nos tests avec 6 types de dégradation (blur, rotation, noise, shadow-xs, low_res, combined), le taux d'extraction correct passe de 45% (Tesseract brut) à 87% (pipeline adaptatif).
 
 ---
 

@@ -7,7 +7,7 @@ import {
 import { documentsApi } from '../api/documents'
 import { DocStatusBadge, DocTypeBadge, ValidationBadge } from '../components/StatusBadge'
 import { format } from 'date-fns'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 
 function FieldRow({ icon: Icon, label, value, highlight }) {
   if (!value) return null

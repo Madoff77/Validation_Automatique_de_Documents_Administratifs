@@ -26,10 +26,10 @@ function ExpirationRow({ anomaly }) {
         <p className="text-sm font-medium text-gray-800 truncate">{anomaly.message}</p>
         <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
           {anomaly.supplier_name && <span className="font-medium text-gray-500">{anomaly.supplier_name}</span>}
-          <span className="bg-gray-100 px-1.5 py-0.5 rounded">{anomaly.type.replace(/_/g, ' ')}</span>
+          <span className="bg-gray-100 px-1.5 py-0.5 rounded-sm">{anomaly.type.replace(/_/g, ' ')}</span>
         </div>
       </div>
-      <div className="text-right flex-shrink-0">
+      <div className="text-right shrink-0">
         {expDate && (
           <p className="text-sm font-semibold text-gray-700">
             {format(parseISO(expDate), 'dd MMM yyyy', { locale: fr })}
@@ -116,10 +116,10 @@ export default function Expirations() {
               <div className="flex gap-3">
                 <div className="w-4 h-4 bg-gray-200 rounded-full mt-0.5" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-2/3" />
-                  <div className="h-3 bg-gray-100 rounded w-1/3" />
+                  <div className="h-4 bg-gray-200 rounded-xs w-2/3" />
+                  <div className="h-3 bg-gray-100 rounded-xs w-1/3" />
                 </div>
-                <div className="h-4 w-16 bg-gray-200 rounded" />
+                <div className="h-4 w-16 bg-gray-200 rounded-sm" />
               </div>
             </div>
           ))}

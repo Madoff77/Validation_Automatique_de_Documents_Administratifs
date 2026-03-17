@@ -88,7 +88,7 @@ export default function Documents() {
                 <tr key={i} className="animate-pulse">
                   {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} className="px-5 py-4">
-                      <div className="h-4 bg-gray-100 rounded w-3/4" />
+                      <div className="h-4 bg-gray-100 rounded-sm w-3/4" />
                     </td>
                   ))}
                 </tr>

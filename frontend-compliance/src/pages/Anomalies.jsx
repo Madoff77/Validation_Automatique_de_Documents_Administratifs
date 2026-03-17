@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle, Filter, RefreshCw, X } from 'lucide-react'
 import { anomaliesApi } from '../api/index'
 import { formatDistanceToNow, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 import clsx from 'clsx'
 
 const SEVERITY_OPTIONS = ['', 'error', 'warning', 'info']
@@ -129,8 +129,8 @@ export default function Anomalies() {
               <div className="flex gap-3">
                 <div className="h-5 w-16 bg-gray-200 rounded-full" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2" />
+                  <div className="h-4 bg-gray-200 rounded-xs w-3/4" />
+                  <div className="h-3 bg-gray-100 rounded-xs w-1/2" />
                 </div>
               </div>
             </div>
@@ -186,14 +186,14 @@ function AnomalyRow({ anomaly, onResolve, resolving }) {
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-400">
             {anomaly.supplier_name && <span className="font-medium text-gray-500">{anomaly.supplier_name}</span>}
-            <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{anomaly.type.replace(/_/g, ' ')}</span>
+            <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-sm">{anomaly.type.replace(/_/g, ' ')}</span>
             <span>{formatDistanceToNow(new Date(anomaly.detected_at), { addSuffix: true, locale: fr })}</span>
             {anomaly.detected_at && (
               <span className="hidden sm:inline">{format(new Date(anomaly.detected_at), 'dd/MM/yyyy HH:mm')}</span>
             )}
           </div>
           {anomaly.details && Object.keys(anomaly.details).length > 0 && (
-            <div className="mt-2 text-xs text-gray-400 bg-gray-50 rounded px-2 py-1.5 font-mono">
+            <div className="mt-2 text-xs text-gray-400 bg-gray-50 rounded-xs px-2 py-1.5 font-mono">
               {Object.entries(anomaly.details).map(([k, v]) => (
                 <span key={k} className="mr-3"><span className="text-gray-500">{k}:</span> {String(v)}</span>
               ))}
@@ -201,10 +201,10 @@ function AnomalyRow({ anomaly, onResolve, resolving }) {
           )}
         </div>
         {!anomaly.resolved && (
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setExpanded(!expanded)}
-              className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded border border-primary-200 hover:bg-primary-50"
+              className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded-xs border border-primary-200 hover:bg-primary-50"
             >
               {expanded ? 'Annuler' : 'Résoudre'}
             </button>

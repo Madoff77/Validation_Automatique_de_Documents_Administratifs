@@ -22,7 +22,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue', loading }) {
       <div className="flex-1 min-w-0">
         <p className="text-xs text-gray-500 font-medium">{label}</p>
         {loading
-          ? <div className="h-7 w-16 bg-gray-200 rounded animate-pulse mt-1" />
+          ? <div className="h-7 w-16 bg-gray-200 rounded-sm animate-pulse mt-1" />
           : <p className="text-2xl font-bold text-gray-900">{value ?? '—'}</p>
         }
         {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}

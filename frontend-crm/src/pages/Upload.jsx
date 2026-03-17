@@ -9,7 +9,7 @@ import {
 import { suppliersApi } from '../api/suppliers'
 import { documentsApi } from '../api/documents'
 import clsx from 'clsx'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 
 const ACCEPT = {
   'application/pdf': ['.pdf'],
