@@ -33,6 +33,13 @@ for path in ["/opt/airflow", "/app"]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
+# Configurer structlog pour que les logs apparaissent dans les task logs Airflow
+try:
+    from utils.logger import configure_logging
+    configure_logging()
+except Exception as _log_err:
+    print(f"[DAG] structlog config skipped: {_log_err}")
+
 # ─────────────────────────────────────────────────────────────
 # DEFAULTS
 # ─────────────────────────────────────────────────────────────
@@ -115,9 +122,10 @@ def _get_document_id(context: dict) -> str:
 def fn_preprocess_ocr(**context):
     """Task 1 : Preprocessing image + OCR."""
     document_id = _get_document_id(context)
+    print(f"[preprocess_ocr] START document_id={document_id}")
     from pipeline.processor import task_ocr
     result = task_ocr(document_id)
-    # Pousser dans XCom pour les tâches suivantes
+    print(f"[preprocess_ocr] DONE method={result.get('ocr_method')} confidence={result.get('ocr_confidence', 0):.2f} text_length={len(result.get('ocr_text', ''))}")
     context["ti"].xcom_push(key="document_id", value=document_id)
     context["ti"].xcom_push(key="ocr_text", value=result["ocr_text"])
     context["ti"].xcom_push(key="ocr_confidence", value=result["ocr_confidence"])
@@ -130,8 +138,10 @@ def fn_classify(**context):
     document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
     ocr_text = ti.xcom_pull(task_ids="preprocess_ocr", key="ocr_text")
 
+    print(f"[classify] START document_id={document_id} text_length={len(ocr_text or '')}")
     from pipeline.processor import task_classify
     result = task_classify(document_id, ocr_text=ocr_text)
+    print(f"[classify] DONE doc_type={result['doc_type']} confidence={result['confidence']:.3f}")
 
     ti.xcom_push(key="doc_type", value=result["doc_type"])
     ti.xcom_push(key="classification_confidence", value=result["confidence"])
@@ -145,8 +155,10 @@ def fn_extract_fields(**context):
     ocr_text = ti.xcom_pull(task_ids="preprocess_ocr", key="ocr_text")
     doc_type = ti.xcom_pull(task_ids="classify", key="doc_type")
 
+    print(f"[extract_fields] START document_id={document_id} doc_type={doc_type}")
     from pipeline.processor import task_extract
     result = task_extract(document_id, doc_type=doc_type, ocr_text=ocr_text)
+    print(f"[extract_fields] DONE fields_found={len([v for v in result['extracted'].values() if v is not None])}")
 
     ti.xcom_push(key="extracted", value=result["extracted"])
     return result
@@ -157,8 +169,10 @@ def fn_validate(**context):
     ti = context["ti"]
     document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
 
+    print(f"[validate] START document_id={document_id}")
     from pipeline.processor import task_validate
     result = task_validate(document_id)
+    print(f"[validate] DONE status={result['validation_status']} anomalies={result['anomaly_count']}")
     ti.xcom_push(key="validation_status", value=result["validation_status"])
     return result
 
@@ -168,8 +182,11 @@ def fn_finalize(**context):
     ti = context["ti"]
     document_id = ti.xcom_pull(task_ids="preprocess_ocr", key="document_id")
 
+    print(f"[finalize] START document_id={document_id}")
     from pipeline.processor import task_finalize
-    return task_finalize(document_id)
+    result = task_finalize(document_id)
+    print(f"[finalize] DONE curated_path={result.get('curated_path')}")
+    return result
 
 
 # ─────────────────────────────────────────────────────────────

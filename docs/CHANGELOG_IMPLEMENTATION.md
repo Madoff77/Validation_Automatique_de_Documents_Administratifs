@@ -401,9 +401,71 @@ command: >
 
 ---
 
+## [2026-03-17] — NETTOYAGE : Suppression dépendances inutilisées
+
+### backend/requirements.txt
+| Package supprimé | Raison |
+|-----------------|--------|
+| `boto3==1.34.69` | AWS SDK — le projet utilise MinIO natif, aucun import dans le code |
+| `pypdf==4.2.0` | Zéro import dans tout le code Python — `pdf2image` et `pdfplumber` suffisent |
+| `aiofiles==23.2.1` | Aucun I/O de fichier async dans le code — importé nulle part |
+| `requests==2.31.0` | Remplacé par `httpx` dans toutes les routes — zéro import restant |
+
+**Gain estimé** : ~50-100 MB sur l'image Docker backend.
+
+### frontend-crm/package.json
+| Package supprimé | Raison |
+|-----------------|--------|
+| `recharts==2.12.2` | Déclaré mais aucun composant JSX du CRM ne l'importe — le Dashboard CRM utilise du HTML/CSS pur |
+
+**Gain estimé** : ~300 KB sur le bundle build.
+
+### Dossiers vides supprimés
+| Dossier | Raison |
+|---------|--------|
+| `nginx/` | Complètement vide — les configs nginx sont intégrées dans les Dockerfiles des frontends |
+| `frontend-crm/src/utils/` | Vide, aucun utilitaire prévu |
+| `frontend-compliance/src/utils/` | Vide, aucun utilitaire prévu |
+
+---
+
+## [2026-03-17] — BUGFIX : Airflow — Tâche `classify` silencieuse (aucun log visible)
+
+### Problème
+Après la fin de `preprocess_ocr`, la tâche `classify` s'exécutait pendant un temps indéterminé sans produire aucun log dans l'UI Airflow. Impossible de savoir si elle progressait, bloquait ou échouait silencieusement.
+
+### Causes identifiées
+
+**1. `structlog` jamais configuré dans le contexte Airflow**
+`configure_logging()` (dans `utils/logger.py`) était appelée uniquement via le lifespan FastAPI (`api/main.py`). Dans les workers Airflow, structlog restait dans son état par défaut — les appels `logger.info(...)` ne produisaient aucune sortie capturée par le task logger Airflow.
+
+**2. Aucun log de début dans `task_classify`**
+`processor.py::task_classify` n'avait pas de log de démarrage. Si la fonction bloquait sur `_get_classifier()` (chargement joblib) ou sur `classifier.predict()`, rien n'indiquait à quelle étape le blocage se produisait.
+
+**3. `_get_classifier()` complètement silencieux**
+Le chargement du modèle ML (potentiellement lent selon le filesystem) n'émettait aucun log — impossible de distinguer "modèle chargé" de "modèle non trouvé, fallback keyword".
+
+### Corrections
+
+**`airflow/dags/document_pipeline_dag.py`**
+- Appel de `configure_logging()` au chargement du module DAG (avec `try/except` pour ne pas bloquer le parsing Airflow si l'import échoue)
+- Ajout de `print()` START/DONE dans les 5 wrappers de tâches (`fn_preprocess_ocr`, `fn_classify`, `fn_extract_fields`, `fn_validate`, `fn_finalize`) — Airflow capture stdout et l'affiche dans les task logs
+
+**`backend/pipeline/processor.py`**
+- `_get_classifier()` : ajout de `classifier_loading` (avant joblib.load) et `classifier_ready` (avec flag `loaded` et mode fallback)
+- `task_classify()` : ajout de `task_classify_start` en début de fonction, `task_classify_predicting` avant l'appel au modèle, et `duration_ms` dans le log `task_classify_done`
+
+### Impact
+- Chaque étape du pipeline est maintenant tracée dans les task logs Airflow
+- Blocage sur chargement modèle ou prédiction immédiatement identifiable
+- `duration_ms` disponible sur `task_classify` pour diagnostiquer les lenteurs
+
+---
+
 ## TODO — Prochaines étapes immédiates
 - [x] Entraînement modèle classifier (F1=1.000, 2801 features)
 - [x] Seed script avec données démo cohérentes (11 documents, mix PDF/images)
 - [x] Pipeline Airflow end-to-end fonctionnel
 - [x] Documentation JURY_DEFENSE.md complète
+- [x] Nettoyage dépendances inutilisées (boto3, pypdf, aiofiles, requests, recharts)
 - [ ] Vérification end-to-end DAG Airflow (5 tâches vertes en UI)

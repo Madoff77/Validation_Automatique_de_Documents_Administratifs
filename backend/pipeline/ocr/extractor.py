@@ -131,6 +131,7 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
     """
     Lancer Tesseract sur une image PIL avec une configuration donnée.
     Retourne (texte, confiance_moyenne).
+    Un seul appel image_to_data — on en extrait à la fois le texte et la confiance.
     """
     try:
         data = pytesseract.image_to_data(
@@ -138,7 +139,6 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
             config=config,
             output_type=pytesseract.Output.DICT,
         )
-        # Filtrer les mots avec confiance suffisante
         words = []
         confidences = []
         for i, conf in enumerate(data["conf"]):
@@ -148,7 +148,7 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
                     words.append(word)
                     confidences.append(float(conf))
 
-        text = pytesseract.image_to_string(pil_img, config=config)
+        text = " ".join(words)
         avg_conf = float(np.mean(confidences)) / 100.0 if confidences else 0.0
 
         return text.strip(), avg_conf
