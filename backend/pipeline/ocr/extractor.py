@@ -36,13 +36,12 @@ logger = get_logger(__name__)
 TESSERACT_CONFIGS = [
     # PSM 3 : auto — détection colonne + orientation  (défaut, bon pour tout)
     r"--oem 3 --psm 3 -l fra+eng",
-    # PSM 6 : bloc de texte uniforme  (bon pour formulaires)
+    # PSM 6 : bloc de texte uniforme  (bon pour formulaires/factures)
     r"--oem 3 --psm 6 -l fra+eng",
-    # PSM 4 : colonne variable  (bon pour factures multi-colonnes)
-    r"--oem 3 --psm 4 -l fra+eng",
-    # PSM 11 : sparse text  (bon pour documents très dégradés)
-    r"--oem 3 --psm 11 -l fra+eng",
 ]
+
+# Seuil de confiance au-dessus duquel on arrête d'essayer d'autres configs
+EARLY_STOP_CONFIDENCE = 0.65
 
 # Seuil minimum de confiance Tesseract (0-100) pour conserver un mot
 MIN_WORD_CONFIDENCE = 20
@@ -159,8 +158,9 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
 
 def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
     """
-    Essayer plusieurs configurations Tesseract sur une image préprocessée,
+    Essayer les configurations Tesseract sur une image préprocessée,
     retourner (texte, confiance, config_utilisée) du meilleur résultat.
+    Early stop si la confiance dépasse EARLY_STOP_CONFIDENCE.
     """
     pil_img = Image.fromarray(np_img)
     best_text = ""
@@ -169,12 +169,14 @@ def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
 
     for config in TESSERACT_CONFIGS:
         text, conf = _tesseract_single(pil_img, config)
-        # Critère : confiance × longueur normalisée (favorise les résultats riches ET fiables)
         score = conf * min(len(text) / 500.0, 1.0)
         if score > best_conf * min(len(best_text) / 500.0, 1.0):
             best_text = text
             best_conf = conf
             best_config = config
+        # Arrêter dès qu'on a une bonne confiance — inutile de tester les autres configs
+        if best_conf >= EARLY_STOP_CONFIDENCE:
+            break
 
     return best_text, best_conf, best_config
 

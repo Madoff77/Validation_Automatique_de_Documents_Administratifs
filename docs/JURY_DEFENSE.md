@@ -63,14 +63,16 @@ Algorithme en 3 phases :
 
 **Phase 3 — Scoring et sélection** : Toutes les stratégies sont appliquées, chaque résultat Tesseract est scoré par `confiance × min(longueur/500, 1)`. On sélectionne le meilleur. Si la confiance reste < 0.4, on retente sur l'image en niveaux de gris brute.
 
-**Résultat** : Sur nos tests avec 6 types de dégradation (blur, rotation, noise, shadow, low_res, combined), le taux d'extraction correct passe de 45% (Tesseract brut) à 87% (pipeline adaptatif).
+**Phase 3 — Tesseract optimisé** : 2 configurations (PSM 3 auto + PSM 6 bloc uniforme) avec early stop si confiance ≥ 0.65. Un seul appel Tesseract par config via `image_to_data` (texte + confiance extraits ensemble). L'upscale est limité à 1200px minimum pour éviter les images trop grandes (>1500px → timeout sur machines contraintes en CPU).
+
+**Résultat** : Sur nos tests avec 6 types de dégradation (blur, rotation, noise, shadow, low_res, combined), le taux d'extraction correct passe de 45% (Tesseract brut) à 87% (pipeline adaptatif). Durée OCR : 20-40 secondes par document.
 
 ---
 
 ### Pourquoi Tesseract 5 et non un modèle deep learning comme TrOCR ?
 
 - **Taille** : Tesseract ~50MB vs TrOCR >1GB. Crucial pour un déploiement Docker.
-- **Latence** : Tesseract ~0.5s/page vs TrOCR ~3-8s sans GPU.
+- **Latence** : Tesseract ~20-40s/page (pipeline complet) vs TrOCR ~3-8s sans GPU mais avec dépendance GPU/modèle lourd.
 - **Domaine** : Nos documents sont des formulaires structurés avec polices standard — Tesseract excelle dans ce cas. TrOCR apporte un gain surtout pour l'écriture manuscrite ou les polices exotiques.
 - **Coût d'infrastructure** : GPU non requis.
 
@@ -272,7 +274,7 @@ Pour valider le numéro de TVA intracommunautaire : `clé = (12 + 3×SIREN%97) %
 
 ### Comment passer à 1 million de documents ?
 
-**Bottleneck actuel** : OCR synchrone dans Airflow (LocalExecutor, 1 worker).
+**Bottleneck actuel** : OCR synchrone dans Airflow (LocalExecutor, 1 worker). Durée observée : 20-40s/doc sur CPU contraint. Le pipeline complet (5 tâches) tourne en ~1-2 minutes.
 
 **Solutions** :
 1. **Horizontal scaling** : Airflow CeleryExecutor avec 10-20 workers Tesseract. Chaque worker traite ~120 pages/heure.
@@ -471,6 +473,27 @@ if angle > 45:
 **Cause** : la variable `MONGO_URI` dans `x-airflow-common` était `mongodb://mongo:27017` (sans auth), alors que MongoDB est configuré avec authentication obligatoire. Le backend utilisait correctement `mongodb://root:rootpassword@mongo:27017`.
 
 **Correction** : alignement de la variable Airflow avec celle du backend : `mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017`.
+
+---
+
+### Bug extractor.py — Tesseract timeout sur images standard (AirflowTaskTimeout 10 min)
+
+**Symptôme** : la tâche `preprocess_ocr` s'arrêtait après `preprocessing_done` et ne passait jamais à `classify`. Après exactement 10 minutes, Airflow levait `AirflowTaskTimeout`.
+
+**Cause** : trois facteurs cumulatifs :
+1. `upscale_if_needed(target_min_dim=1500)` agrandissait une image 1240×1748 à 1500×2110 (+21%)
+2. `_tesseract_single` appelait successivement `image_to_data` puis `image_to_string` — **2 appels Tesseract par config**
+3. **4 configurations** PSM testées systématiquement → 4 × 2 × ~2 min = ~16 min → timeout
+
+**Correction** :
+- `target_min_dim` réduit à 1200 (image 1240px n'est plus upscalée)
+- `image_to_string` supprimé — texte reconstruit depuis les tokens `image_to_data`
+- Configs réduites de 4 à 2 (PSM 3 + PSM 6)
+- Early stop si confiance ≥ 0.65
+
+**Résultat** : 1-2 appels Tesseract vs 8 → durée OCR 20-40s au lieu de 16 min.
+
+**Leçon** : ne jamais mesurer les performances d'un outil système (Tesseract, ffmpeg...) en théorie — toujours valider sur la machine cible. Les timings varient d'un facteur 10-50x selon le CPU disponible dans les containers.
 
 ---
 

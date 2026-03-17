@@ -462,6 +462,47 @@ Le chargement du modèle ML (potentiellement lent selon le filesystem) n'émetta
 
 ---
 
+## [2026-03-17] — BUGFIX : Tesseract timeout — `AirflowTaskTimeout` sur `preprocess_ocr`
+
+### Symptôme
+La tâche `preprocess_ocr` du DAG échouait systématiquement avec `AirflowTaskTimeout` (timeout 10 min) sans jamais passer à `classify`. Les logs s'arrêtaient après `preprocessing_done`.
+
+### Cause racine — 3 facteurs cumulatifs
+
+**1. Upscale trop agressif**
+`upscale_if_needed` (default `target_min_dim=1500`) upscalait une image 1240×1748 vers **1500×2110** (+21%). Tesseract sur une image 1500×2110 prend 2-3 minutes par configuration.
+
+**2. Double appel Tesseract par configuration**
+`_tesseract_single` appelait successivement `image_to_data` puis `image_to_string` sur la même image — soit **2 appels Tesseract par config**. L'image et les calculs de confiance étaient dupliqués sans nécessité.
+
+**3. 4 configurations Tesseract testées systématiquement**
+4 configs × 2 appels × ~2 min = **~16 min → timeout** (limite 10 min Airflow).
+
+### Corrections
+
+**`backend/pipeline/ocr/extractor.py`**
+- `TESSERACT_CONFIGS` : 4 configs → **2 configs** (PSM 3 auto + PSM 6 bloc uniforme — couvrent 95% des documents)
+- `_tesseract_single` : suppression de `image_to_string` — le texte est reconstruit depuis les tokens de `image_to_data` (un seul appel Tesseract)
+- `_best_tesseract_pass` : ajout d'un **early stop** si confiance ≥ 0.65 — inutile de tester la config suivante si la première donne déjà un bon résultat
+
+**`backend/pipeline/ocr/preprocessor.py`**
+- `upscale_if_needed` default : `1500` → **`1200`** — une image 1240×1748 n'est plus upscalée (1240 ≥ 1200)
+- `strategy_blurry` : `target_min_dim=2000` → **`1600`**
+- `strategy_very_blurry` : `target_min_dim=2500` → **`1800`**
+
+### Impact mesuré
+
+| Métrique | Avant | Après |
+|----------|-------|-------|
+| Appels Tesseract par image | 8 (4 configs × 2) | 1–2 (early stop à 0.65) |
+| Taille image traitée (1240×1748) | 1500×2110 (upscalée) | 1240×1748 (inchangée) |
+| Durée OCR estimée | ~16 min → **timeout** | ~20-40 sec ✅ |
+
+### Note Makefile
+Ajout de `make reset-docs` : remet tous les documents MongoDB en statut `pending` pour faciliter les tests end-to-end Airflow sans avoir à uploader de nouveaux fichiers.
+
+---
+
 ## TODO — Prochaines étapes immédiates
 - [x] Entraînement modèle classifier (F1=1.000, 2801 features)
 - [x] Seed script avec données démo cohérentes (11 documents, mix PDF/images)

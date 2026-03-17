@@ -171,7 +171,7 @@ def deskew(img: np.ndarray, angle: float) -> np.ndarray:
     return rotated
 
 
-def upscale_if_needed(img: np.ndarray, target_min_dim: int = 1500) -> np.ndarray:
+def upscale_if_needed(img: np.ndarray, target_min_dim: int = 1200) -> np.ndarray:
     """Upscaler si la résolution est trop faible pour Tesseract."""
     h, w = img.shape[:2]
     min_dim = min(h, w)
@@ -286,7 +286,7 @@ def strategy_blurry(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
     unsharp mask fort → CLAHE → Sauvola threshold
     """
     gray = to_gray(img)
-    gray = upscale_if_needed(gray, target_min_dim=2000)  # Upscale plus agressif
+    gray = upscale_if_needed(gray, target_min_dim=1600)  # Upscale modéré pour images floues
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
     # Accentuation contours
@@ -304,7 +304,7 @@ def strategy_very_blurry(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
     Upscale agressif → débruitage NLM → unsharp fort → adaptive threshold
     """
     gray = to_gray(img)
-    gray = upscale_if_needed(gray, target_min_dim=2500)
+    gray = upscale_if_needed(gray, target_min_dim=1800)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
     # Débruitage fort avant accentuation (sinon on accentue le bruit)
