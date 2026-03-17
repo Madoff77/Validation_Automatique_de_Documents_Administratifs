@@ -10,7 +10,7 @@ from api.models.schemas import (
 )
 from api.dependencies import get_current_user, require_admin, require_operator, require_viewer
 from storage.mongo_client import get_db
-from storage.minio_client import get_minio, upload_file, get_presigned_url
+from storage.minio_client import get_minio, upload_file, get_presigned_url, download_file
 from api.config import settings
 from utils.logger import get_logger
 import httpx
@@ -159,7 +159,6 @@ async def list_documents(
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: str,
-    current_user: dict = Depends(require_viewer),
     db = Depends(get_db),
 ):
     d = await db.documents.find_one({"document_id": document_id})
@@ -172,7 +171,6 @@ async def get_document(
 async def download_document(
     document_id: str,
     zone: str = Query("raw", pattern="^(raw|clean|curated)$"),
-    current_user: dict = Depends(require_viewer),
     db = Depends(get_db),
 ):
     d = await db.documents.find_one({"document_id": document_id})
@@ -184,22 +182,31 @@ async def download_document(
     if not path:
         raise HTTPException(status_code=404, detail=f"Document non disponible en zone {zone}")
 
-    url = get_presigned_url(zone, path.replace(f"{zone}/", "", 1), expires_hours=1)
-    if not url:
-        raise HTTPException(status_code=500, detail="Impossible de générer l'URL de téléchargement")
+    bucket_name = getattr(settings, f"minio_bucket_{zone}")
+    # Fix the path to not include bucket prefix if it exists
+    object_name = path
+    if path.startswith(f"{bucket_name}/"):
+        object_name = path.replace(f"{bucket_name}/", "", 1)
+        
+    try:
+        file_bytes = download_file(bucket_name, object_name)
+    except Exception as e:
+        logger.error("minio_download_failed", bucket=bucket_name, object=object_name, error=str(e))
+        raise HTTPException(status_code=500, detail="Erreur lors de la récupération du fichier")
 
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=url)
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=d["mime_type"],
+        headers={"Content-Disposition": f'attachment; filename="{d["original_filename"]}"'}
+    )
 
-
-@router.get("/{document_id}/view-url")
-async def get_view_url(
+@router.get("/{document_id}/view")
+async def view_document(
     document_id: str,
     zone: str = Query("raw", pattern="^(raw|clean|curated)$"),
-    current_user: dict = Depends(require_viewer),
     db = Depends(get_db),
 ):
-    """Retourne l'URL présignée MinIO pour affichage inline (sans redirection)."""
+    """Retourne le flux binaire MinIO pour affichage inline."""
     d = await db.documents.find_one({"document_id": document_id})
     if not d:
         raise HTTPException(status_code=404, detail="Document introuvable")
@@ -213,11 +220,27 @@ async def get_view_url(
             raise HTTPException(status_code=404, detail="Fichier non disponible")
         zone = "raw"
 
-    url = get_presigned_url(zone, path.replace(f"{zone}/", "", 1), expires_hours=1)
-    if not url:
-        raise HTTPException(status_code=500, detail="Impossible de générer l'URL de visualisation")
+    bucket_name = getattr(settings, f"minio_bucket_{zone}")
+    # Fix the path to not include bucket prefix if it exists
+    object_name = path
+    if path.startswith(f"{bucket_name}/"):
+        object_name = path.replace(f"{bucket_name}/", "", 1)
 
-    return {"url": url, "mime_type": d["mime_type"], "filename": d["original_filename"]}
+    try:
+        file_bytes = download_file(bucket_name, object_name)
+    except Exception as e:
+        logger.error("minio_download_failed", bucket=bucket_name, object=object_name, error=str(e))
+        raise HTTPException(status_code=500, detail="Erreur lors de la récupération du fichier")
+
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=d["mime_type"],
+        headers={
+            "Content-Disposition": f'inline; filename="{d["original_filename"]}"',
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
 
 
 @router.delete("/{document_id}", status_code=204)

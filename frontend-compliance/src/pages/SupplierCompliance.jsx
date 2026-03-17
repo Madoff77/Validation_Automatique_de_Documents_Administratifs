@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Clock, FileText, Calendar, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Clock, FileText, Calendar, ShieldAlert, Eye } from 'lucide-react'
 import { suppliersApi, anomaliesApi } from '../api/index'
+import DocumentViewer from '../components/DocumentViewer'
 import { formatDistanceToNow, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -40,6 +41,7 @@ function SeverityBadge({ severity }) {
 export default function SupplierCompliance() {
   const { id } = useParams()
   const qc = useQueryClient()
+  const [viewerDocId, setViewerDocId] = useState(null)
 
   const { data: supplier, isLoading: loadingSupplier } = useQuery({
     queryKey: ['supplier', id],
@@ -199,7 +201,7 @@ export default function SupplierCompliance() {
             {unresolvedAnomalies.length > 0 && (
               <div className="divide-y divide-gray-50">
                 {unresolvedAnomalies.map((a) => (
-                  <AnomalyItem key={a.anomaly_id} anomaly={a} onResolve={(notes) => resolveMutation.mutate({ aId: a.anomaly_id, notes })} />
+                  <AnomalyItem key={a.anomaly_id} anomaly={a} onResolve={(notes) => resolveMutation.mutate({ aId: a.anomaly_id, notes })} onViewDocument={setViewerDocId} />
                 ))}
               </div>
             )}
@@ -211,7 +213,7 @@ export default function SupplierCompliance() {
                 </summary>
                 <div className="divide-y divide-gray-50">
                   {resolvedAnomalies.map((a) => (
-                    <AnomalyItem key={a.anomaly_id} anomaly={a} resolved />
+                    <AnomalyItem key={a.anomaly_id} anomaly={a} resolved onViewDocument={setViewerDocId} />
                   ))}
                 </div>
               </details>
@@ -219,13 +221,16 @@ export default function SupplierCompliance() {
           </div>
         )}
       </div>
+      {viewerDocId && <DocumentViewer documentId={viewerDocId} onClose={() => setViewerDocId(null)} />}
     </div>
   )
 }
 
-function AnomalyItem({ anomaly, onResolve, resolved }) {
+function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
   const [expanded, setExpanded] = useState(false)
   const [notes, setNotes] = useState('')
+
+  const docId = anomaly.details?.document_id || anomaly.document_id
 
   return (
     <div className={clsx('px-6 py-4', resolved && 'opacity-60')}>
@@ -250,14 +255,24 @@ function AnomalyItem({ anomaly, onResolve, resolved }) {
             </div>
           )}
         </div>
-        {!resolved && onResolve && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded border border-primary-200 hover:bg-primary-50 flex-shrink-0"
-          >
-            {expanded ? 'Annuler' : 'Résoudre'}
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {docId && (
+            <button
+              onClick={() => onViewDocument(docId)}
+              className="text-xs text-gray-600 hover:text-gray-900 font-medium px-2 py-1 flex items-center gap-1 rounded bg-gray-100 hover:bg-gray-200"
+            >
+              <Eye size={14} /> Doc
+            </button>
+          )}
+          {!resolved && onResolve && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded border border-primary-200 hover:bg-primary-50 flex-shrink-0"
+            >
+              {expanded ? 'Annuler' : 'Résoudre'}
+            </button>
+          )}
+        </div>
       </div>
       {expanded && (
         <div className="mt-3 flex gap-2 ml-16">
