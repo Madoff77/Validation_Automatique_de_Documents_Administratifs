@@ -192,6 +192,34 @@ async def download_document(
     return RedirectResponse(url=url)
 
 
+@router.get("/{document_id}/view-url")
+async def get_view_url(
+    document_id: str,
+    zone: str = Query("raw", pattern="^(raw|clean|curated)$"),
+    current_user: dict = Depends(require_viewer),
+    db = Depends(get_db),
+):
+    """Retourne l'URL présignée MinIO pour affichage inline (sans redirection)."""
+    d = await db.documents.find_one({"document_id": document_id})
+    if not d:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+
+    path_key = f"minio_{zone}_path"
+    path = d.get(path_key)
+    if not path:
+        # Fallback sur raw si la zone demandée n'existe pas encore
+        path = d.get("minio_raw_path")
+        if not path:
+            raise HTTPException(status_code=404, detail="Fichier non disponible")
+        zone = "raw"
+
+    url = get_presigned_url(zone, path.replace(f"{zone}/", "", 1), expires_hours=1)
+    if not url:
+        raise HTTPException(status_code=500, detail="Impossible de générer l'URL de visualisation")
+
+    return {"url": url, "mime_type": d["mime_type"], "filename": d["original_filename"]}
+
+
 @router.delete("/{document_id}", status_code=204)
 async def delete_document(
     document_id: str,

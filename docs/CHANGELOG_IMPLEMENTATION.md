@@ -5,6 +5,57 @@
 
 ---
 
+## [2026-03-17] — BUGFIX : "Document introuvable" après traitement + Visualiseur de documents
+
+### Bug 1 — ValidationStatus manquant : "info"
+
+**Symptôme** : après traitement par Airflow, cliquer sur certains documents (notamment les RIB) affichait "Document introuvable" dans le CRM au lieu des données extraites.
+
+**Cause racine** : dans `validator.py`, la règle `bic_present` (RIB sans BIC) utilisait `severity="info"`.
+La fonction `_check()` retournait `{"status": "info", ...}`. Or le schéma Pydantic `ValidationCheck.status: ValidationStatus` ne connaissait pas la valeur `"info"` → erreur de validation Pydantic → réponse HTTP 500 → axios throw → React Query `data=undefined` → frontend affiche "Document introuvable."
+
+**Fix** :
+- `backend/api/models/schemas.py` : ajout `INFO = "info"` dans l'enum `ValidationStatus`
+
+```python
+class ValidationStatus(str, Enum):
+    OK = "ok"
+    WARNING = "warning"
+    ERROR = "error"
+    PENDING = "pending"
+    INFO = "info"   # ← ajouté
+```
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `backend/api/models/schemas.py` | Ajout `INFO = "info"` dans `ValidationStatus` |
+
+---
+
+### Fonctionnalité — Visualiseur de documents inline (PDF + images)
+
+**Besoin** : pouvoir ouvrir et inspecter le contenu d'un document directement dans le CRM, sans le télécharger.
+
+**Approche** :
+1. Nouveau endpoint `GET /documents/{id}/view-url` → retourne l'URL présignée MinIO sous forme JSON `{url, mime_type, filename}`
+2. Bouton "Visualiser" dans la page détail document
+3. Modal plein-écran avec `<iframe>` pour PDF ou `<img>` pour images
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `backend/api/routes/documents.py` | Ajout endpoint `GET /{id}/view-url` (retourne URL présignée JSON) |
+| `frontend-crm/src/api/documents.js` | Ajout `getViewUrl(id)` |
+| `frontend-crm/src/pages/DocumentDetail.jsx` | Ajout composant `DocumentViewer` (modal) + bouton "Visualiser" |
+
+**Comportement** :
+- PDF → `<iframe>` avec viewer natif du navigateur
+- Image (JPEG/PNG) → `<img>` dans modal scrollable
+- URL présignée valide 1h, rechargée automatiquement par React Query
+
+---
+
 ## [2026-03-16] — RBAC Frontend : UX adaptée par rôle
 
 ### Principe

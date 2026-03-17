@@ -27,6 +27,9 @@ export const documentsApi = {
 
   getDownloadUrl: (id, zone = 'raw') =>
     `${apiClient.defaults.baseURL}/documents/${id}/download?zone=${zone}`,
+
+  getViewUrl: (id, zone = 'raw') =>
+    apiClient.get(`/documents/${id}/view-url?zone=${zone}`).then((r) => r.data),
 }
 
 export const statsApi = {
