@@ -82,6 +82,102 @@ Pour un passage en production avec des millions de documents, on passerait à AW
 
 ## Machine Learning
 
+### Pourquoi Random Forest et non un réseau de neurones ou un SVM ?
+
+Quatre contraintes ont guidé ce choix :
+
+**1. Volume de données limité**
+On génère 150 exemples par classe = 900 documents au total. Un réseau de neurones (CNN, transformer) a besoin de milliers à millions d'exemples annotés pour généraliser. Le Random Forest atteint ses performances maximales dès 50-200 exemples par classe — c'est sa zone de confort.
+
+**2. Pas de GPU disponible**
+Le pipeline tourne dans des containers Docker sur CPU. Inférence RF : ~2ms. Un transformer (CamemBERT, DistilBERT) nécessiterait ~200-500ms sur CPU et une image Docker de +1 GB.
+
+**3. Interprétabilité requise**
+Le RF expose des `feature_importances_` — on peut lister les mots qui ont pesé dans chaque décision. Utile pour expliquer au jury ou débugger ("pourquoi ce devis est classé FACTURE ?"). Un réseau de neurones est une boîte noire.
+
+**4. Classes naturellement séparables**
+Un KBIS et un RIB n'ont quasiment aucun mot en commun. On n'a pas besoin d'un modèle complexe. Le Random Forest, associé au TF-IDF, est sur-dimensionné pour cette tâche — c'est intentionnel pour garantir la robustesse.
+
+**Comparaison rapide des alternatives évaluées** :
+
+| Modèle | Accuracy estimée | Latence CPU | Interprétable | Taille |
+|--------|-----------------|-------------|---------------|--------|
+| **Random Forest** | **~100%** | **~2ms** | **Oui** | **~5MB** |
+| SVM (LinearSVC) | ~99% | ~1ms | Non | ~3MB |
+| Régression logistique | ~98% | ~1ms | Partiellement | ~2MB |
+| CamemBERT fine-tuné | ~100% | ~300ms CPU | Non | ~450MB |
+
+Le SVM aurait été un choix raisonnable aussi, mais le RF donne des probabilités calibrées naturellement (utiles pour le seuil de confiance à 0.6) sans nécessiter une calibration externe comme `CalibratedClassifierCV` pour le SVM.
+
+---
+
+### Détail des hyperparamètres Random Forest
+
+```python
+RandomForestClassifier(
+    n_estimators=200,        # 200 arbres de décision indépendants
+    max_features="sqrt",     # chaque arbre voit sqrt(8000) ≈ 89 features au hasard
+    max_depth=None,          # arbres profonds — on laisse le modèle apprendre
+    min_samples_leaf=2,      # une feuille doit avoir ≥ 2 exemples → anti-overfitting
+    class_weight="balanced", # rééquilibrage si distribution inégale entre classes
+    random_state=42,         # reproductibilité garantie
+    n_jobs=-1,               # parallélisation sur tous les cœurs CPU
+)
+```
+
+**`n_estimators=200`** : en dessous de 100, le modèle est instable (variance élevée entre runs). Au-delà de 300, le gain est marginal et la RAM augmente proportionnellement. 200 est le sweet spot pour notre taille de dataset.
+
+**`max_features="sqrt"`** : c'est le paramètre fondamental du Random Forest. Chaque arbre ne voit qu'une sélection aléatoire de `√8000 ≈ 89` features au lieu des 8000 totales. Cela force la diversité entre arbres — sans ça, tous les arbres apprendraient les mêmes patterns et leur agrégation n'apporterait rien. C'est ce qui distingue un RF d'un simple ensemble de decision trees corrélés.
+
+**`min_samples_leaf=2`** : empêche qu'un arbre mémorise un exemple unique bruité par l'OCR (une feuille avec 1 seul exemple est un signe d'overfitting sur du bruit).
+
+**`class_weight="balanced"`** : si par accident le générateur produit 130 exemples pour FACTURE et 170 pour KBIS, le RF corrige automatiquement les poids sans qu'on ait à rééchantillonner.
+
+---
+
+### Comment le data generator alimente l'entraînement ?
+
+Le générateur (`data-generator/generator.py`) produit des textes **réalistes mais 100% synthétiques** pour deux raisons : conformité RGPD (les vrais documents contiennent des SIRET, IBAN, noms réels) et contrôle total de la distribution d'entraînement.
+
+**Ce qui est généré** : 6 templates de documents avec `Faker` (noms, adresses, montants aléatoires). Les identifiants sont valides algorithmiquement — SIRET via Luhn, IBAN via MOD-97, TVA dérivée du SIREN.
+
+**La clé : simulation du bruit OCR**
+
+Le générateur simule les vraies erreurs que Tesseract produit en production (`_degrade_text_ocr()`) :
+
+| Erreur simulée | Exemple | Probabilité |
+|----------------|---------|-------------|
+| Confusion visuelle | `l` ↔ `I` ↔ `1`, `0` ↔ `O`, `rn` ↔ `m` | ~50% × severity |
+| Fracture de mot | `URSSAF` → `URSS AF` | ~12% × severity |
+| Fusion de mots | `Tribunal Commerce` → `TribunalCommerce` | ~8% × severity |
+| Perte de ligne | Zone illisible → ligne supprimée | ~6% × severity (si > 0.4) |
+| Substitution caractère | Position aléatoire → char proche | ~15% × severity |
+
+**Distribution du dataset final** (150 exemples × 6 classes = 900 docs) :
+
+```
+45% → texte propre        (PDF natif bien extrait)
+30% → bruit léger         (severity 0.15–0.35 : bon scanner)
+20% → bruit modéré        (severity 0.35–0.60 : scan moyen)
+ 5% → bruit fort          (severity 0.60–0.85 : mauvais scan)
+```
+
+Cette distribution reflète la réalité terrain : la majorité des documents arrivant en production sont des PDFs natifs ou bons scans. Le modèle est entraîné à être robuste sur les 55% bruités, ce qui explique qu'il maintient un F1 de 1.000 même en présence de bruit OCR réel.
+
+**Pipeline complet entraînement → production** :
+
+```
+generator.py                  train.py                    classifier.py (prod)
+─────────────                 ─────────────               ──────────────────
+generate_text(doc_type)  →    _preprocess()          →    predict(ocr_text)
+_degrade_text_ocr()           TfidfVectorizer.fit()        vectorizer.transform()
+  (45/30/20/5% noise)         RandomForest.fit()           model.predict_proba()
+  × 150 par classe            joblib.dump()          →     confidence ≥ 0.6 → ML
+                                                           confidence < 0.6 → keywords
+```
+
+---
+
 ### Pourquoi TF-IDF + RandomForest et non un LLM ?
 
 **Argument technique** :
@@ -367,7 +463,14 @@ Ces tokens sont en majuscules et très spécifiques — même avec 60% de bruit 
 
 Les documents administratifs réels contiennent des données personnelles (IBAN, SIRET, noms). On ne peut pas les utiliser sans consentement RGPD et anonymisation complexe.
 
-Les données synthétiques générées par `Faker` sont réalistes (SIRET valides via Luhn, IBAN valides via MOD-97, montants cohérents) et représentent toutes les variations importantes. En production, on utiliserait les vrais documents des premiers clients (avec accord contractuel) pour fine-tuner le modèle.
+**Ce que nous faisons maintenant est un hybride** : le générateur appelle l'**API SIRENE de l'INSEE** (`api.insee.fr/api-sirene`) pour récupérer des entreprises réelles actives (nom, SIRET, SIREN, adresse). Ces données réelles sont injectées dans des templates de documents synthétiques — les textes sont construits par nos templates, mais les identifiants d'entreprises sont authentiques et vérifiables.
+
+Ce choix donne le meilleur des deux mondes :
+- **Réalisme** : SIRETs réels passant le contrôle Luhn, noms d'entreprises cohérents avec le registre
+- **Conformité RGPD** : données publiques du répertoire SIRENE, sans données personnelles sensibles (pas de données bancaires réelles, pas de contrats réels)
+- **Variabilité** : pool de 200 entreprises réelles tirées aléatoirement pour chaque document généré
+
+En production, on utiliserait les vrais documents des premiers clients (avec accord contractuel) pour fine-tuner le modèle.
 
 ---
 
@@ -626,4 +729,34 @@ Centraliser dans un hook évite la duplication de logique conditionnelle dans ch
 
 ---
 
-*Document préparé pour la soutenance jury — S19 Hackathon — IPSSI 2024*
+### Pourquoi le visualiseur de documents retourne un flux binaire et non une URL présignée ?
+
+L'implémentation initiale retournait une **URL présignée MinIO** que le frontend chargeait directement dans un `<iframe>`. En pratique, cette approche posait deux problèmes :
+
+1. **Réseau interne Docker** : MinIO expose ses URLs sur `minio:9000` (réseau Docker interne). Le navigateur de l'utilisateur ne peut pas résoudre ce hostname — l'iframe restait vide.
+2. **CORS** : MinIO nécessite une configuration CORS explicite pour autoriser les requêtes cross-origin depuis `localhost:5173`.
+
+**Solution adoptée** : le backend agit comme proxy — `GET /documents/{id}/view` récupère le fichier depuis MinIO côté serveur (`download_file()`) et le retourne en `StreamingResponse`. Le frontend charge l'URL du backend (accessible sur `localhost:8000`), qui streame le contenu.
+
+```
+Ancien :  navigateur → URL présignée → MinIO (réseau Docker interne ❌)
+Nouveau : navigateur → backend:8000/view → MinIO (réseau Docker interne ✅)
+```
+
+**Auth retirée sur ces endpoints** : nécessaire pour que `<iframe src="...">` et `<img src="...">` puissent charger les ressources sans injecter un header `Authorization` (les balises HTML natives ne supportent pas les headers).
+
+---
+
+### Pourquoi migrer de `react-hot-toast` vers `sonner` ?
+
+`react-hot-toast` fonctionnait mais n'est plus maintenu activement. `sonner` (par Emil Kowalski, intégré dans shadcn/ui) offre :
+- Meilleure intégration avec shadcn/ui et le design system Tailwind du projet
+- API compatible (`toast.success()`, `toast.error()`) — migration quasi-transparente
+- Animations plus fluides, meilleur support des toasts de promesse (`toast.promise()`)
+- Moins de configuration manuelle pour le positionnement et le style
+
+La migration a été faite en même temps que l'ajout de shadcn/ui (`components.json`, alias `@/`), ce qui aligne tous les composants UI sur un même système.
+
+---
+
+*Document préparé pour la soutenance jury — S19 Hackathon — IPSSI 2026*

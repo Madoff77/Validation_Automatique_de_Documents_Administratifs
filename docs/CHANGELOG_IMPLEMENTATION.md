@@ -5,6 +5,108 @@
 
 ---
 
+## [2026-03-18] — Intégration API SIRENE + Refonte frontend + Visualiseur documents v2
+
+### data-generator — Intégration API SIRENE (INSEE)
+
+**Fonctionnalité** : le générateur de documents synthétiques utilise désormais des données d'entreprises **réelles** récupérées via l'API SIRENE de l'INSEE, au lieu de données 100% Faker.
+
+**Comportement** :
+- `fetch_sirene_companies(n_companies)` interroge `https://api.insee.fr/api-sirene/3.11/siret` avec la clé `INSEE_API_KEY`
+- Le pool d'entreprises réelles est mis en cache en mémoire (`REAL_COMPANIES_POOL`) pour éviter les appels répétés
+- `_gen_company()` pioche dans ce pool pour enrichir chaque document généré (nom, SIRET, SIREN, adresse réels)
+
+**Impact seed** : `seed.py` appelle `fetch_sirene_companies()` en début d'exécution pour enrichir les données fournisseurs de démo avec des entreprises réelles.
+
+**Prérequis** : `INSEE_API_KEY` doit être définie dans `.env` et passée au container via `docker-compose.yml`.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `data-generator/generator.py` | Ajout `fetch_sirene_companies()`, `_gen_company()` utilise l'API, `load_dotenv()` multi-chemin |
+| `data-generator/requirements.txt` | Ajout `requests`, `python-dotenv` |
+| `scripts/seed.py` | Import `fetch_sirene_companies`, enrichissement fournisseurs demo |
+| `docker-compose.yml` | Ajout `INSEE_API_KEY: ${INSEE_API_KEY:-}` dans l'env `backend-api` |
+| `.env` | Ajout `INSEE_API_KEY` |
+
+---
+
+### Backend — Visualiseur documents : presigned URL → streaming binaire
+
+**Problème** : l'ancien endpoint `GET /documents/{id}/view-url` retournait une URL présignée MinIO. Sur certaines configurations réseau/navigateur, les URLs présignées MinIO ne sont pas accessibles directement depuis le frontend (CORS, réseau interne Docker).
+
+**Fix** : remplacement par du streaming binaire direct depuis le backend.
+
+| Ancien comportement | Nouveau comportement |
+|---|---|
+| `GET /view-url` → `{ url, mime_type, filename }` (JSON) | `GET /view` → `StreamingResponse` (binaire) |
+| `GET /download` → `RedirectResponse` vers URL présignée | `GET /download` → `StreamingResponse` avec `Content-Disposition: attachment` |
+| Requiert `require_viewer` | Auth retirée (accès depuis iframe/img sans token) |
+
+**Méthode** : ajout de `download_file()` dans `minio_client.py`, appelé par les deux endpoints. Le frontend charge le fichier directement via l'URL du backend sans intermédiaire MinIO.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `backend/api/routes/documents.py` | `view-url` → `view` (StreamingResponse), `download` → StreamingResponse, auth retirée sur ces 2 endpoints, correction préfixe bucket dans `object_name` |
+| `backend/storage/minio_client.py` | Ajout `download_file(bucket, object_name)` |
+
+---
+
+### Frontend CRM & Compliance — Refonte UI
+
+**`DocumentViewer` extrait en composant dédié** : le visualiseur était inline dans `DocumentDetail.jsx`. Il est maintenant un composant réutilisable `src/components/DocumentViewer.jsx`, utilisé dans les deux frontends.
+
+Nouvelles fonctionnalités du composant :
+- Affiche le document (PDF via `<iframe>`, image via `<img>`) **et** les champs extraits côte à côte
+- Skeleton loading animé pendant le chargement
+- Bouton de téléchargement direct intégré
+- `viewUrl` et `downloadUrl` construits directement depuis `apiClient.defaults.baseURL` (suppression de la query `getViewUrl`)
+
+**Migration `react-hot-toast` → `sonner`** : le système de notifications toast a été remplacé dans les deux frontends.
+
+| Avant | Après |
+|---|---|
+| `import toast from 'react-hot-toast'` | `import { toast } from 'sonner'` |
+| `<Toaster>` de react-hot-toast | `<Toaster>` de `@/components/ui/sonner` (shadcn/ui) |
+
+**Refonte page Login** (CRM & Compliance) : redesign visuel complet, meilleure ergonomie mobile.
+
+**Ajout shadcn/ui** : composants `components.json`, `jsconfig.json` avec alias `@/` configuré dans `vite.config.js`.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `frontend-crm/src/components/DocumentViewer.jsx` | Nouveau composant (extrait + visualiseur côte à côte) |
+| `frontend-compliance/src/components/DocumentViewer.jsx` | Idem |
+| `frontend-crm/src/components/ui/sonner.jsx` | Wrapper Toaster shadcn/ui |
+| `frontend-compliance/src/components/ui/sonner.jsx` | Idem |
+| `frontend-crm/src/pages/DocumentDetail.jsx` | Import `DocumentViewer` depuis composant, `toast` → sonner |
+| `frontend-crm/src/pages/Login.jsx` | Redesign complet, `toast` → sonner |
+| `frontend-compliance/src/pages/Login.jsx` | Redesign complet, `toast` → sonner |
+| `frontend-crm/src/main.jsx` | `react-hot-toast` → `sonner` Toaster |
+| `frontend-compliance/src/main.jsx` | Idem |
+| `frontend-crm/src/App.jsx` | Ajout import Toaster sonner |
+| `frontend-crm/vite.config.js` | Alias `@/` → `src/`, config mise à jour |
+| `frontend-compliance/vite.config.js` | Idem |
+| `frontend-crm/package.json` | Ajout `sonner`, `@radix-ui/*`, suppression `react-hot-toast` |
+| `frontend-compliance/package.json` | Idem |
+
+---
+
+### BUGFIX — seed.py : `INSEE_API_KEY` absente du container Docker
+
+**Symptôme** : `make seed` échoue à la génération de documents — l'API SIRENE retourne une erreur d'authentification, `_gen_company()` lève une `RuntimeError`, le seed plante.
+
+**Cause** : `INSEE_API_KEY` était dans `.env.example` mais pas dans `.env`, et pas déclarée dans `docker-compose.yml` → la variable n'était jamais injectée dans le container `backend-api`.
+
+**Fix** :
+1. `docker-compose.yml` : ajout `INSEE_API_KEY: ${INSEE_API_KEY:-}` dans l'env `backend-api`
+2. `.env` : ajout de la clé (copiée depuis `.env.example`)
+3. `generator.py` : `load_dotenv()` cherche maintenant le `.env` dans `../`, `/app/` et le dossier courant (robustesse multi-environnement)
+
+---
+
 ## [2026-03-17] — Validation métier FACTURE/DEVIS : philosophie révisée + robustesse ML
 
 ### Validation — Philosophie par type de document
