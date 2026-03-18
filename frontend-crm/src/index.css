@@ -62,6 +62,13 @@
   body { @apply bg-gray-50; }
 }
 
+:root {
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --border: oklch(0.93 0.01 256);
+  --radius: 0.625rem;
+}
+
 /* Scrollbar fine */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { @apply bg-gray-100 rounded-full; }
