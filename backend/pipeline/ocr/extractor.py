@@ -130,7 +130,12 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
     """
     Lancer Tesseract sur une image PIL avec une configuration donnée.
     Retourne (texte, confiance_moyenne).
-    Un seul appel image_to_data — on en extrait à la fois le texte et la confiance.
+
+    Les mots sont regroupés par ligne (block_num, par_num, line_num) pour
+    préserver la structure ligne/colonne du document. Sans ça, les en-têtes
+    de colonnes ("Prix HT", "Montant HT") se retrouvent dans le même flux
+    que les lignes totaux, ce qui fait matcher les regex montants sur les
+    mauvaises valeurs.
     """
     try:
         data = pytesseract.image_to_data(
@@ -138,16 +143,19 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
             config=config,
             output_type=pytesseract.Output.DICT,
         )
-        words = []
+        # Grouper les mots par ligne physique (block > paragraph > line)
+        lines: dict = {}
         confidences = []
         for i, conf in enumerate(data["conf"]):
             if isinstance(conf, (int, float)) and conf >= MIN_WORD_CONFIDENCE:
                 word = data["text"][i].strip()
                 if word:
-                    words.append(word)
+                    key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+                    lines.setdefault(key, []).append(word)
                     confidences.append(float(conf))
 
-        text = " ".join(words)
+        # Reconstruire le texte avec sauts de ligne entre chaque ligne physique
+        text = "\n".join(" ".join(words) for words in lines.values())
         avg_conf = float(np.mean(confidences)) / 100.0 if confidences else 0.0
 
         return text.strip(), avg_conf

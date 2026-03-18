@@ -111,7 +111,7 @@ export default function DocumentDetail() {
     queryKey: ['document', id],
     queryFn: () => documentsApi.get(id),
     refetchInterval: (data) =>
-      data && ['processed', 'error'].includes(data.status) ? false : 8_000,
+      data && data.status === 'processed' ? false : 8_000,
   })
 
   const reprocessMutation = useMutation({

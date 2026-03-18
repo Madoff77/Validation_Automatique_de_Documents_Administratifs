@@ -721,20 +721,141 @@ def generate_text(doc_type: str, anomaly: str = None) -> str:
     return gen(anomaly=anomaly)
 
 
+def _degrade_text_ocr(text: str, severity: float = 0.3) -> str:
+    """
+    Simuler les erreurs typiques d'un moteur OCR (Tesseract) sur du texte.
+
+    Catégories d'erreurs simulées :
+    1. Confusions de caractères similaires visuellement (l↔I↔1, 0↔O, rn↔m, etc.)
+    2. Espaces parasites en milieu de mot (fractionnement)
+    3. Fusion de mots adjacents (manque d'espace)
+    4. Substitutions de caractères aléatoires (bruit générique)
+    5. Suppression de lignes (OCR ne lit pas toute la page)
+
+    severity : 0.0 (pas de bruit) → 1.0 (très dégradé)
+    """
+    # Paires de confusion visuelles typiques Tesseract/OCR
+    # Format : (source, cible) — appliquées une fois si trouvées dans le texte
+    OCR_CHAR_CONFUSIONS = [
+        ('l', 'I'), ('I', 'l'), ('1', 'l'), ('l', '1'),
+        ('0', 'O'), ('O', '0'),
+        ('rn', 'm'), ('m', 'rn'),
+        ('cl', 'd'),
+        ('vv', 'w'),
+        ('ii', 'n'),
+        ('§', 'S'),
+        ('€', 'E'),
+        ('à', 'a'), ('é', 'e'), ('è', 'e'), ('ê', 'e'), ('ù', 'u'), ('â', 'a'),
+    ]
+
+    lines = text.split('\n')
+    result_lines = []
+
+    for line in lines:
+        # Garder les lignes vides intactes
+        if not line.strip():
+            result_lines.append(line)
+            continue
+
+        # 1. Suppression aléatoire de lignes (simule zones illisibles)
+        if severity > 0.4 and random.random() < severity * 0.06:
+            continue  # Ligne perdue
+
+        degraded = line
+
+        # 2. Confusions de caractères visuels (probabilité proportionnelle à severity)
+        if random.random() < severity * 0.5:
+            src, dst = random.choice(OCR_CHAR_CONFUSIONS)
+            idx = degraded.find(src)
+            if idx != -1:
+                degraded = degraded[:idx] + dst + degraded[idx + len(src):]
+
+        # 3. Substitution aléatoire d'un caractère (bruit générique)
+        if random.random() < severity * 0.15 and len(degraded) > 5:
+            pos = random.randint(2, len(degraded) - 2)
+            if degraded[pos].isalpha():
+                # Remplacer par un caractère proche visuellement
+                noise_chars = 'ceoasiIlO01'
+                degraded = degraded[:pos] + random.choice(noise_chars) + degraded[pos + 1:]
+
+        # 4. Fractionnement d'un mot (espace parasite au milieu)
+        if random.random() < severity * 0.12:
+            words = degraded.split()
+            if words:
+                idx = random.randint(0, len(words) - 1)
+                word = words[idx]
+                if len(word) >= 5:
+                    cut = random.randint(2, len(word) - 2)
+                    words[idx] = word[:cut] + ' ' + word[cut:]
+                    degraded = ' '.join(words)
+
+        # 5. Fusion de deux mots adjacents (manque d'espace)
+        if random.random() < severity * 0.08:
+            words = degraded.split()
+            if len(words) >= 2:
+                idx = random.randint(0, len(words) - 2)
+                merged = words[idx] + words[idx + 1]
+                words = words[:idx] + [merged] + words[idx + 2:]
+                degraded = ' '.join(words)
+
+        result_lines.append(degraded)
+
+    return '\n'.join(result_lines)
+
+
 def generate_training_dataset(n_per_class: int = 150) -> list:
     """
     Générer n_per_class textes par classe → liste de (text, label).
-    Utilisé pour l'entraînement du classifier.
+
+    Distribution du bruit :
+    - 45% texte propre (PDF natif bien extrait)
+    - 30% bruit léger (severity 0.15–0.35 : bon scanner, quelques artefacts)
+    - 20% bruit modéré (severity 0.35–0.60 : scan moyen, Tesseract imparfait)
+    - 5%  bruit fort (severity 0.60–0.85 : mauvais scan, très dégradé)
+
+    Cette distribution reflète la réalité terrain :
+    la majorité des documents sont des PDFs natifs ou bons scans.
     """
+    # Seuils de dégradation et leur probabilité cumulative
+    DEGRADATION_SCHEDULE = [
+        (0.45, None),           # 45% — texte propre
+        (0.75, (0.15, 0.35)),   # 30% — bruit léger
+        (0.95, (0.35, 0.60)),   # 20% — bruit modéré
+        (1.00, (0.60, 0.85)),   #  5% — bruit fort
+    ]
+
     dataset = []
+    n_clean = n_degraded_light = n_degraded_medium = n_degraded_heavy = 0
+
     for doc_type in DOC_TYPES:
         print(f"  Génération {n_per_class} × {doc_type}...")
         for _ in range(n_per_class):
             text = generate_text(doc_type)
+            roll = random.random()
+            for threshold, severity_range in DEGRADATION_SCHEDULE:
+                if roll < threshold:
+                    if severity_range is None:
+                        n_clean += 1
+                    else:
+                        severity = random.uniform(*severity_range)
+                        text = _degrade_text_ocr(text, severity)
+                        if severity_range[0] < 0.35:
+                            n_degraded_light += 1
+                        elif severity_range[0] < 0.60:
+                            n_degraded_medium += 1
+                        else:
+                            n_degraded_heavy += 1
+                    break
+
             dataset.append((text, doc_type))
 
     random.shuffle(dataset)
-    print(f"  Dataset total : {len(dataset)} documents")
+    total = len(dataset)
+    print(f"  Dataset total : {total} documents")
+    print(f"  Distribution bruit : propre={n_clean} ({n_clean*100//total}%) "
+          f"léger={n_degraded_light} ({n_degraded_light*100//total}%) "
+          f"modéré={n_degraded_medium} ({n_degraded_medium*100//total}%) "
+          f"fort={n_degraded_heavy} ({n_degraded_heavy*100//total}%)")
     return dataset
 
 

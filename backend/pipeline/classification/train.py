@@ -57,48 +57,16 @@ def generate_training_data(n_per_class: int) -> list:
     print(f"{'═'*60}")
     try:
         from generator import generate_training_dataset
+        print("  [OK] Générateur réaliste chargé (data-generator/generator.py)")
+        print("       Bruit OCR simulé sur ~55% des samples — accuracy attendue 85-94%")
         return generate_training_dataset(n_per_class)
-    except ImportError:
-        # Fallback : génération inline simplifiée
-        print("  [WARN] Générateur externe non disponible, génération inline...")
-        return _generate_inline(n_per_class)
-
-
-def _generate_inline(n_per_class: int) -> list:
-    """Génération inline minimale si le générateur externe n'est pas accessible."""
-    import random
-    from faker import Faker
-    fake = Faker("fr_FR")
-
-    templates = {
-        "FACTURE": lambda: f"FACTURE numéro FACT-{fake.numerify('####')} date d'émission {fake.date()} "
-                           f"montant HT {random.randint(100,5000):.2f} TVA 20% montant TTC "
-                           f"SIRET {fake.numerify('##############')} mode de règlement virement "
-                           f"date d'échéance pénalités de retard indemnité forfaitaire",
-        "DEVIS": lambda: f"DEVIS référence DEVIS-{fake.numerify('###')} proposition commerciale "
-                         f"valable jusqu'au {fake.date()} bon pour accord acceptation acompte "
-                         f"total TTC TVA {random.randint(100,5000):.2f} prestations proposées offre",
-        "SIRET": lambda: f"ATTESTATION DE SITUATION répertoire SIRENE INSEE numéro SIRET "
-                         f"{fake.numerify('##############')} établissement ACTIF code APE annuaire-entreprises "
-                         f"date de création direction générale INSEE SIREN",
-        "URSSAF": lambda: f"ATTESTATION DE VIGILANCE URSSAF cotisations sociales contributions patronales "
-                          f"L.243-15 code de la sécurité sociale net-entreprises régularité de situation "
-                          f"EN RÈGLE valable jusqu'au {fake.date()} SIRET {fake.numerify('##############')}",
-        "KBIS": lambda: f"EXTRAIT Kbis registre du commerce tribunal de commerce immatriculation "
-                        f"capital social {random.randint(1000,100000)} gérant RCS greffier "
-                        f"siège social forme juridique date d'immatriculation cet extrait n'est valable que 3 mois",
-        "RIB": lambda: f"RELEVÉ D'IDENTITÉ BANCAIRE titulaire du compte IBAN FR{fake.numerify('##' + '#'*23)} "
-                       f"BIC SWIFT domiciliation banque code banque {fake.numerify('#####')} "
-                       f"code guichet {fake.numerify('#####')} clé RIB virement prélèvement",
-    }
-
-    dataset = []
-    for doc_type, template_fn in templates.items():
-        for _ in range(n_per_class):
-            dataset.append((template_fn(), doc_type))
-    import random as r
-    r.shuffle(dataset)
-    return dataset
+    except ImportError as e:
+        print(f"\n  ERREUR : Impossible d'importer le générateur de données ({e})")
+        print("  Le générateur doit être accessible via :")
+        print("    Docker  : volume mount ./data-generator:/app/data-generator dans docker-compose.yml")
+        print("    Local   : lancer depuis la racine du projet")
+        print("  Commande correcte : make train  (depuis la racine)")
+        raise SystemExit(1)
 
 
 def build_vectorizer(texts: list) -> TfidfVectorizer:

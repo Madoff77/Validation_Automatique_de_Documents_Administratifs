@@ -5,6 +5,75 @@
 
 ---
 
+## [2026-03-17] — Validation métier FACTURE/DEVIS : philosophie révisée + robustesse ML
+
+### Validation — Philosophie par type de document
+
+**Problème** : le validateur appliquait les mêmes exigences strictes à tous les types de documents. Une FACTURE dont l'OCR n'avait pas extrait le SIRET générait une anomalie "SIRET absent" dans le dashboard compliance — ce qui est incorrect : l'absence d'un champ extrait est une limite OCR, pas un défaut de conformité du document.
+
+**Règle métier appliquée** :
+- **FACTURE / DEVIS** : pas de législation imposant un contrôle de conformité strict entre professionnels. L'article L441-9 CGI liste les mentions légales mais leur absence n'est pas un motif de rejet dans notre contexte. On vérifie uniquement ce qu'on a extrait.
+- **URSSAF / KBIS / SIRET** : documents de conformité légale — SIRET obligatoire, dates d'expiration critiques → validation stricte maintenue.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `backend/pipeline/validation/validator.py` | `_validate_facture` et `_validate_devis` réécrits |
+
+**Détail des changements `_validate_facture`** :
+
+| Règle | Avant | Après |
+|---|---|---|
+| SIRET absent | Check "warning" + anomalie | Aucun check (non extrait par OCR = normal) |
+| SIRET présent invalide | Warning + anomalie | Warning + anomalie ✅ conservé |
+| Montant TTC/HT manquant | Warning + anomalie | INFO uniquement, zéro anomalie |
+| Raison sociale | Non vérifiée | INFO (présent/absent) |
+| TVA cohérence | Toujours calculée | Calculée seulement si montants présents |
+| SIRET inter-docs | Toujours vérifié | Seulement si SIRET extrait |
+
+**Détail des changements `_validate_devis`** :
+
+| Règle | Avant | Après |
+|---|---|---|
+| SIRET | Non vérifié | Non vérifié (non obligatoire sur devis) |
+| Montant TTC | Non vérifié | INFO |
+| Raison sociale émetteur | Non vérifiée | INFO |
+| Date validité | Toujours | Seulement si date extraite |
+| TVA cohérence | Toujours | Seulement si montants présents |
+
+**Statut global** : les checks `"info"` sont désormais exclus du calcul du statut global — une facture avec des champs non extraits reste `"ok"` et non `"warning"`.
+
+---
+
+### ML — Simulation de bruit OCR dans les données d'entraînement
+
+**Problème** : le modèle Random Forest affichait 100% d'accuracy parce que les données d'entraînement ET de test étaient du texte parfaitement propre (même générateur, même distribution). Le modèle mémorisait les keywords discriminants — score trivial et non représentatif du comportement réel sur OCR dégradé.
+
+**Fix** :
+- Ajout de `_degrade_text_ocr(severity)` dans `data-generator/generator.py` : simule les erreurs typiques Tesseract (confusions `l/I/1`, `0/O`, `rn/m`, espaces parasites, fusions de mots, suppression de lignes)
+- `generate_training_dataset()` applique le bruit sur 55% des samples avec distribution réaliste :
+
+| Catégorie | Part | Severity | Représente |
+|---|---|---|---|
+| Propre | 45% | 0 | PDF natif bien extrait |
+| Léger | 30% | 0.15–0.35 | Bon scanner, quelques artefacts |
+| Modéré | 20% | 0.35–0.60 | Scan moyen, Tesseract imparfait |
+| Fort | 5% | 0.60–0.85 | Mauvais scan, très dégradé |
+
+- Suppression du fallback `_generate_inline` dans `train.py` : erreur fatale explicite si le générateur n'est pas accessible (plutôt que produire silencieusement un modèle biaisé)
+- Ajout `backend/data-generator/README.md` expliquant l'architecture volume mount
+
+**Résultat attendu** : accuracy 85–94% (vs 100% artificiel) — réaliste et défendable.
+
+**Fichiers modifiés** :
+| Fichier | Changement |
+|---|---|
+| `data-generator/generator.py` | Ajout `_degrade_text_ocr()` + refonte `generate_training_dataset()` |
+| `backend/pipeline/classification/train.py` | Suppression `_generate_inline`, erreur fatale si générateur absent |
+| `backend/data-generator/README.md` | Documentation architecture volume mount |
+
+---
+
 ## [2026-03-17] — BUGFIX : "Document introuvable" après traitement + Visualiseur de documents
 
 ### Bug 1 — ValidationStatus manquant : "info"
@@ -554,10 +623,56 @@ Ajout de `make reset-docs` : remet tous les documents MongoDB en statut `pending
 
 ---
 
+## [2026-03-17] — BUGFIX : Extraction champs — HT/TVA incorrects sur factures réelles
+
+### Symptôme
+Sur une facture nette scannée (PDF) uploadée dans le CRM, le montant TTC était correctement extrait mais les montants HT et TVA étaient complètement faux ("improvisés").
+
+### Causes racines (3 facteurs cumulatifs)
+
+**1. `_RE_MONTANT_HT` trop permissif — `ht\s*:?`**
+Le pattern contenait l'alternative `ht\s*:?` (HT sans contexte obligatoire). Sur une facture en tableau, cette alternative matchait le premier "HT" trouvé dans le texte — souvent un **en-tête de colonne** (`Prix Unitaire HT`, `Montant HT`) avant la ligne de total. Le montant extrait correspondait alors au prix d'une ligne article, pas au total HT.
+
+**2. Déduction croisée sans validation — TVA inventée**
+Une fois HT extrait avec une valeur incorrecte, la déduction `tva = ttc - ht` produisait une TVA incohérente. Aucune vérification de cohérence du taux n'existait → n'importe quelle valeur était acceptée.
+
+**3. `_tesseract_single` détruisait la structure ligne**
+`" ".join(words)` — tous les mots de la page joints avec des espaces, sans sauts de ligne. Les en-têtes de colonnes du tableau et les lignes de total se retrouvaient dans le même flux de texte → les regex ne pouvaient pas distinguer les deux.
+
+### Corrections
+
+**`backend/pipeline/ocr/extractor.py`** — `_tesseract_single`
+- Les mots sont désormais groupés par ligne physique via `(block_num, par_num, line_num)` depuis les données `image_to_data`
+- Reconstruction : `"\n".join(...)` au lieu de `" ".join(...)` — sauts de ligne préservés entre chaque ligne du document
+
+**`backend/pipeline/extraction/field_extractor.py`** — `_RE_MONTANT_HT`
+- Suppression de `ht\s*:?` (alternative trop permissive — matchait les en-têtes de colonnes)
+- Suppression de `prix\s+ht` (matchait "Prix Unitaire HT" en en-tête de tableau)
+- Ajout de `sous.?total\s+ht` (couvre "Sous-total HT", "Sous total HT")
+- Remplacement de `ht\s*:?` → `\bht\s*:` (deux-points **obligatoire** + word boundary, pour couvrir les labels "HT : 200,00")
+
+**`backend/pipeline/extraction/field_extractor.py`** — déduction croisée
+- Ajout de `_tva_rate_plausible(ht, tva)` : la déduction `tva = ttc - ht` ou `ht = ttc - tva` n'est validée que si le taux TVA implicite est à ±2% d'un taux légal français (20%, 10%, 8.5%, 5.5%, 2.1%)
+- Si HT a été mal extrait, le taux résultant sera incohérent → la déduction est annulée (None) plutôt que propagée
+
+### Fichiers modifiés
+| Fichier | Changement |
+|---|---|
+| `backend/pipeline/ocr/extractor.py` | `_tesseract_single` : reconstruction texte ligne par ligne (préserve `\n`) |
+| `backend/pipeline/extraction/field_extractor.py` | `_RE_MONTANT_HT` révisé + `_tva_rate_plausible()` + déduction conditionnelle |
+
+### Impact
+- HT extrait depuis la **ligne total** et non depuis un en-tête de colonne ✓
+- TVA déduite uniquement si le taux implicite est légalement cohérent ✓
+- PDF natifs non affectés (pdfplumber préserve déjà les sauts de ligne)
+
+---
+
 ## TODO — Prochaines étapes immédiates
 - [x] Entraînement modèle classifier (F1=1.000, 2801 features)
 - [x] Seed script avec données démo cohérentes (11 documents, mix PDF/images)
 - [x] Pipeline Airflow end-to-end fonctionnel
 - [x] Documentation JURY_DEFENSE.md complète
 - [x] Nettoyage dépendances inutilisées (boto3, pypdf, aiofiles, requests, recharts)
-- [ ] Vérification end-to-end DAG Airflow (5 tâches vertes en UI)
+- [x] Correction extraction HT/TVA sur factures réelles (regex + structure Tesseract)
+- [x] Vérification end-to-end DAG Airflow (5 tâches vertes en UI)
