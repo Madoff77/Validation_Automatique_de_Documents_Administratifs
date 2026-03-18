@@ -5,7 +5,7 @@ import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Clock, FileText, Calend
 import { suppliersApi, anomaliesApi } from '../api/index'
 import { formatDistanceToNow, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 import clsx from 'clsx'
 
 const STATUS_CONFIG = {
@@ -71,7 +71,7 @@ export default function SupplierCompliance() {
 
   if (loadingSupplier) return (
     <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-4">
-      <div className="h-6 bg-gray-200 rounded w-48" />
+      <div className="h-6 bg-gray-200 rounded-xs w-48" />
       <div className="h-32 bg-gray-100 rounded-xl" />
     </div>
   )
@@ -234,7 +234,7 @@ function AnomalyItem({ anomaly, onResolve, resolved }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-800">{anomaly.message}</p>
           <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
-            <span className="bg-gray-100 px-1.5 py-0.5 rounded">{anomaly.type.replace(/_/g, ' ')}</span>
+            <span className="bg-gray-100 px-1.5 py-0.5 rounded-sm">{anomaly.type.replace(/_/g, ' ')}</span>
             <span>{formatDistanceToNow(new Date(anomaly.detected_at), { addSuffix: true, locale: fr })}</span>
             {resolved && anomaly.resolved_at && (
               <span className="text-green-500">
@@ -243,7 +243,7 @@ function AnomalyItem({ anomaly, onResolve, resolved }) {
             )}
           </div>
           {anomaly.details && Object.keys(anomaly.details).length > 0 && (
-            <div className="mt-1.5 text-xs font-mono text-gray-400 bg-gray-50 rounded px-2 py-1">
+            <div className="mt-1.5 text-xs font-mono text-gray-400 bg-gray-50 rounded-xs px-2 py-1">
               {Object.entries(anomaly.details).map(([k, v]) => (
                 <span key={k} className="mr-3"><span className="text-gray-500">{k}:</span> {String(v)}</span>
               ))}
@@ -253,7 +253,7 @@ function AnomalyItem({ anomaly, onResolve, resolved }) {
         {!resolved && onResolve && (
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded border border-primary-200 hover:bg-primary-50 flex-shrink-0"
+            className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded-xs border border-primary-200 hover:bg-primary-50 shrink-0"
           >
             {expanded ? 'Annuler' : 'Résoudre'}
           </button>

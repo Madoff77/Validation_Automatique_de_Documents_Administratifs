@@ -64,7 +64,7 @@ export default function Suppliers() {
               onClick={() => setFilterStatus(filterStatus === status ? '' : status)}
               className={clsx(
                 'card p-4 flex items-center gap-3 text-left transition-all',
-                filterStatus === status ? `ring-2 ring-offset-1 ${cfg.border}` : 'hover:shadow-md'
+                filterStatus === status ? `ring-2 ring-offset-1 ${cfg.border}` : 'hover:shadow-xs-md'
               )}
             >
               <div className={clsx('p-2 rounded-lg', cfg.bg)}>
@@ -81,9 +81,9 @@ export default function Suppliers() {
 
       {/* Search + filter bar */}
       <div className="card p-4 mb-6 flex items-center gap-3">
-        <Search size={16} className="text-gray-400 flex-shrink-0" />
+        <Search size={16} className="text-gray-400 shrink-0" />
         <input
-          className="flex-1 text-sm outline-none bg-transparent placeholder-gray-400"
+          className="flex-1 text-sm outline-hidden bg-transparent placeholder-gray-400"
           placeholder="Rechercher par nom ou SIRET…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -105,8 +105,8 @@ export default function Suppliers() {
             <div key={i} className="px-5 py-4 flex items-center gap-4 animate-pulse">
               <div className="w-10 h-10 bg-gray-200 rounded-xl" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-1/3" />
-                <div className="h-3 bg-gray-100 rounded w-1/4" />
+                <div className="h-4 bg-gray-200 rounded-xs w-1/3" />
+                <div className="h-3 bg-gray-100 rounded-xs w-1/4" />
               </div>
               <div className="h-6 w-24 bg-gray-200 rounded-full" />
             </div>
@@ -125,7 +125,7 @@ export default function Suppliers() {
               to={`/suppliers/${supplier.supplier_id}`}
               className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors group"
             >
-              <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500 font-semibold text-sm flex-shrink-0 group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors">
+              <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500 font-semibold text-sm shrink-0 group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors">
                 {supplier.name.slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
@@ -135,7 +135,7 @@ export default function Suppliers() {
                   {supplier.contact_email && <span>{supplier.contact_email}</span>}
                 </div>
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-3 shrink-0">
                 {supplier.active_anomalies_count > 0 && (
                   <span className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">
                     {supplier.active_anomalies_count} anomalie{supplier.active_anomalies_count > 1 ? 's' : ''}

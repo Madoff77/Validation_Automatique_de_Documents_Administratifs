@@ -5,7 +5,7 @@ import { Plus, Search, Building2, ChevronRight, Loader2, X } from 'lucide-react'
 import { suppliersApi } from '../api/suppliers'
 import { ComplianceBadge } from '../components/StatusBadge'
 import { usePermissions } from '../hooks/usePermissions'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 
 function CreateModal({ onClose }) {
   const qc = useQueryClient()
@@ -27,7 +27,7 @@ function CreateModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-xs-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="font-semibold text-gray-900">Nouveau fournisseur</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

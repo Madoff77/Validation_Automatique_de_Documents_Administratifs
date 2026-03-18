@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useQuery } from '@tanstack/react-query'
 import { statsApi } from '../api/index'
 import clsx from 'clsx'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 
 const NAV = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -21,7 +21,7 @@ export default function Sidebar() {
   const handleLogout = async () => { await logout(); toast.success('Déconnecté'); navigate('/login') }
 
   return (
-    <aside className="w-64 bg-gray-900 text-white flex flex-col flex-shrink-0">
+    <aside className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
       <div className="px-6 py-5 border-b border-gray-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">

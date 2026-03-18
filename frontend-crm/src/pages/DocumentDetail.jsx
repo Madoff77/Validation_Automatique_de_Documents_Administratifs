@@ -8,7 +8,7 @@ import {
 import { documentsApi } from '../api/documents'
 import { DocStatusBadge, DocTypeBadge, ValidationBadge } from '../components/StatusBadge'
 import { format } from 'date-fns'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner';
 
 function FieldRow({ icon: Icon, label, value, highlight }) {
   if (!value) return null
@@ -111,7 +111,7 @@ export default function DocumentDetail() {
     queryKey: ['document', id],
     queryFn: () => documentsApi.get(id),
     refetchInterval: (data) =>
-      data && ['processed', 'error'].includes(data.status) ? false : 8_000,
+      data && data.status === 'processed' ? false : 8_000,
   })
 
   const reprocessMutation = useMutation({

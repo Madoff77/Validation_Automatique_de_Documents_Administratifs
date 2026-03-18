@@ -19,6 +19,9 @@ build/
 venv/
 env/
 
+# Data generator
+/data-generator/data/
+
 # ML artifacts
 *.joblib
 *.pkl

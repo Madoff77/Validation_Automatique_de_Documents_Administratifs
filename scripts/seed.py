@@ -14,7 +14,6 @@ Usage : python scripts/seed.py
 import sys
 import os
 import asyncio
-import json
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -30,6 +29,23 @@ from utils.logger import configure_logging, get_logger
 
 configure_logging()
 logger = get_logger("seed")
+
+try:
+    sys.path.insert(0, "/app/data-generator")
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../data-generator"))
+    from generator import (
+        fetch_sirene_companies, 
+        _siren_to_tva, 
+        generate_text, 
+        _text_to_pdf, 
+        text_to_image, 
+        degrade_image
+    )
+    import cv2
+    has_generator = True
+except ImportError as e:
+    has_generator = False
+    logger.warning(f"Générateur de données non disponible : {e}.")
 
 # ─────────────────────────────────────────────────────────────
 # DONNÉES DEMO FIXÉES (reproducible)
@@ -97,13 +113,24 @@ async def seed_users(db):
         print(f"  ✓ {u['username']} ({u['role']}) — mot de passe: {u['password']}")
 
 
-async def seed_suppliers(db):
+async def seed_suppliers(db, real_companies):
     print("\n── Fournisseurs ──────────────────────────────")
+    global SUPPLIERS
+    
+    for i, real_c in enumerate(real_companies):
+        if i < len(SUPPLIERS):
+            SUPPLIERS[i]["name"] = real_c["name"]
+            SUPPLIERS[i]["siret"] = real_c["siret"]
+            SUPPLIERS[i]["siren"] = real_c["siren"]
+            SUPPLIERS[i]["tva_number"] = _siren_to_tva(real_c["siren"])
+            SUPPLIERS[i]["address"] = real_c["address"]
+
     for s in SUPPLIERS:
         existing = await db.suppliers.find_one({"supplier_id": s["supplier_id"]})
         if existing:
             print(f"  ↳ {s['name']} déjà présent")
             continue
+        
         now = datetime.now(timezone.utc)
         await db.suppliers.insert_one({
             **s,
@@ -252,17 +279,29 @@ async def run_pipeline_on_seeds(db, document_ids: list):
 
 
 async def main():
+    if not has_generator:
+        print("\nGénérateur de données non disponible.")
+        return
+
     print("╔══════════════════════════════════════════════════╗")
     print("║         DocPlatform — Seed de démonstration      ║")
     print("╚══════════════════════════════════════════════════╝")
+
+    print("\nRécupération de données réelles depuis l'API Sirene...")
+    real_companies = fetch_sirene_companies()
+    print(f"  → {len(real_companies)} entreprises récupérées pour enrichir les fournisseurs de démonstration.")
+
+    if not real_companies:
+        print("Aucune donnée réelle récupérée.")
 
     client = AsyncIOMotorClient(settings.mongo_uri)
     db = client[settings.mongo_db]
 
     await seed_users(db)
-    await seed_suppliers(db)
+    await seed_suppliers(db, real_companies)
     doc_ids = await seed_documents(db)
-    await run_pipeline_on_seeds(db, doc_ids)
+    if doc_ids:
+        await run_pipeline_on_seeds(db, doc_ids)
 
     client.close()
 
