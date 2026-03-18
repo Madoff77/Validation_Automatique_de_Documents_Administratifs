@@ -43,8 +43,6 @@ export default function Documents() {
           </Link>
         )}
       </div>
-
-      {/* Filtres */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -72,8 +70,6 @@ export default function Documents() {
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
-
-      {/* Tableau */}
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>

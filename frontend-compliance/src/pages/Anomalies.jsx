@@ -91,8 +91,6 @@ export default function Anomalies() {
           </button>
         </div>
       </div>
-
-      {/* Filters */}
       <div className="card p-4 mb-6 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Filter size={14} /> Filtres
@@ -206,7 +204,7 @@ function AnomalyRow({ anomaly, onResolve, resolving, onViewDocument }) {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {docId && (
             <button
               onClick={() => onViewDocument(docId)}

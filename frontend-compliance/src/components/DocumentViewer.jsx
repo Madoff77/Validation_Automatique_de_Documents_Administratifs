@@ -51,7 +51,6 @@ export default function DocumentViewer({ documentId, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-6xl h-[90vh] overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -79,11 +78,7 @@ export default function DocumentViewer({ documentId, onClose }) {
             </button>
           </div>
         </div>
-
-        {/* Content Side-by-Side */}
         <div className="flex flex-1 overflow-hidden min-h-0">
-          
-          {/* Main Viewer Area */}
           <div className="flex-1 bg-gray-100 relative border-r border-gray-200 flex items-center justify-center">
             {!iframeLoaded && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-gray-100 z-10">
@@ -98,8 +93,6 @@ export default function DocumentViewer({ documentId, onClose }) {
               onLoad={() => setIframeLoaded(true)}
             />
           </div>
-
-          {/* Extracted Data Sidebar */}
           <div className="w-96 bg-white overflow-y-auto">
             <div className="p-6">
               <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-6 border-b border-gray-100 pb-2">

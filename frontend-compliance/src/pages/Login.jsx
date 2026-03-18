@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -52,16 +55,20 @@ export default function Login() {
                 </div>
                 <div className="bg-white rounded-2xl shadow-xs-2xl p-8">
                     <h2 className="text-lg font-semibold text-gray-900 mb-6">
+                        {" "}
                         Connexion
                     </h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="label">Nom d'utilisateur</label>
-                            <input
-                                className="input"
+                        <Field>
+                            <FieldLabel htmlFor="input-field-username">
+                                Nom d'utilisateur
+                            </FieldLabel>
+                            <Input
+                                id="input-field-username"
                                 type="text"
                                 placeholder="admin"
                                 value={form.username}
+                                autocomplete="username"
                                 onChange={(e) =>
                                     setForm({
                                         ...form,
@@ -71,12 +78,14 @@ export default function Login() {
                                 required
                                 autoFocus
                             />
-                        </div>
-                        <div>
-                            <label className="label">Mot de passe</label>
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="input-field-password">
+                                Mot de passe
+                            </FieldLabel>
                             <div className="relative">
-                                <input
-                                    className="input pr-10"
+                                <Input
+                                    className="pr-10"
                                     type={showPwd ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={form.password}
@@ -100,17 +109,20 @@ export default function Login() {
                                     )}
                                 </button>
                             </div>
-                        </div>
-                        <button
-                            type="submit"
-                            className="btn-primary w-full justify-center py-2.5"
-                            disabled={loading}
-                        >
-                            {loading && (
-                                <Loader2 size={16} className="animate-spin" />
+                        </Field>
+                        <Button type="submit" disabled={loading}>
+                            {loading ? (
+                                <>
+                                    <Loader2
+                                        size={16}
+                                        className="animate-spin mr-2"
+                                    />
+                                    Connexion…
+                                </>
+                            ) : (
+                                "Se connecter"
                             )}
-                            {loading ? "Connexion…" : "Se connecter"}
-                        </button>
+                        </Button>
                     </form>
                     <div className="mt-6 pt-5 border-t border-gray-100">
                         <p className="text-xs text-gray-500 text-center mb-3">
@@ -118,14 +130,15 @@ export default function Login() {
                         </p>
                         <div className="flex gap-2">
                             {["admin", "operator", "viewer"].map((r) => (
-                                <button
+                                <Button
                                     key={r}
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => fill(r)}
-                                    className="flex-1 py-1.5 text-xs border border-gray-200 rounded-lg
-                                   hover:bg-gray-50 text-gray-600 capitalize transition-colors"
+                                    className="flex-1 capitalize"
                                 >
                                     {r}
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     </div>

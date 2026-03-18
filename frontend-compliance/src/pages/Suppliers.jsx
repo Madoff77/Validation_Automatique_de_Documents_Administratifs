@@ -53,8 +53,6 @@ export default function Suppliers() {
           <p className="text-sm text-gray-500 mt-0.5">{suppliers.length} fournisseur{suppliers.length > 1 ? 's' : ''} enregistrés</p>
         </div>
       </div>
-
-      {/* Status summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {Object.entries(STATUS_CONFIG).map(([status, cfg]) => {
           const { icon: Icon } = cfg
@@ -78,8 +76,6 @@ export default function Suppliers() {
           )
         })}
       </div>
-
-      {/* Search + filter bar */}
       <div className="card p-4 mb-6 flex items-center gap-3">
         <Search size={16} className="text-gray-400 shrink-0" />
         <input
@@ -97,8 +93,6 @@ export default function Suppliers() {
           </button>
         )}
       </div>
-
-      {/* Supplier list */}
       {isLoading ? (
         <div className="card divide-y divide-gray-50">
           {[...Array(5)].map((_, i) => (

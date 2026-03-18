@@ -25,7 +25,6 @@ from typing import Optional
 
 import numpy as np
 from faker import Faker
-from PIL import Image, ImageFilter, ImageEnhance
 import cv2
 import requests
 from dotenv import load_dotenv
@@ -34,7 +33,7 @@ load_dotenv()
 
 API_KEY = os.getenv("INSEE_API_KEY")
 if not API_KEY:
-    print("Clé API SIRENE non trouvée. Veuillez définir INSEE_API_KEY dans votre .env.")
+    raise RuntimeError("Clé API SIRENE manquante. Veuillez définir INSEE_API_KEY dans votre .env.")
 
 fake = Faker("fr_FR")
 Faker.seed(42)

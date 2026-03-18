@@ -20,7 +20,7 @@ function Guard({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Guard><Layout /></Guard>}>

@@ -95,8 +95,6 @@ export default function Expirations() {
           </div>
         )}
       </div>
-
-      {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {sections.map(({ key, label, icon: Icon, iconColor }) => (
           <div key={key} className="card p-4 flex items-center gap-3">

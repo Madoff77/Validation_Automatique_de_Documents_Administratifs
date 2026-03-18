@@ -23,34 +23,34 @@ function PrivateRoute({ children }) {
 }
 
 function OperatorRoute({ children }) {
-  const { canUpload } = usePermissions()
-  if (!canUpload) return (
-    <div className="p-12 text-center">
-      <p className="text-4xl mb-4">🔒</p>
-      <h2 className="text-xl font-semibold text-gray-800 mb-2">Accès non autorisé</h2>
-      <p className="text-gray-500 text-sm">Votre rôle ne permet pas d'accéder à cette page.</p>
-      <Navigate to="/dashboard" replace />
-    </div>
-  )
-  return children
+	const { canUpload } = usePermissions()
+	if (!canUpload) return (
+		<div className="p-12 text-center">
+			<p className="text-4xl mb-4">🔒</p>
+			<h2 className="text-xl font-semibold text-gray-800 mb-2">Accès non autorisé</h2>
+			<p className="text-gray-500 text-sm">Votre rôle ne permet pas d'accéder à cette page.</p>
+			<Navigate to="/dashboard" replace />
+		</div>
+	)
+  	return children
 }
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="suppliers" element={<Suppliers />} />
-          <Route path="suppliers/:id" element={<SupplierDetail />} />
-          <Route path="upload" element={<OperatorRoute><Upload /></OperatorRoute>} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="documents/:id" element={<DocumentDetail />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
-  )
+	return (
+		<BrowserRouter future={{ v7_startTransition: true }}>
+			<Routes>
+				<Route path="/login" element={<Login />} />
+				<Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+				<Route index element={<Navigate to="/dashboard" replace />} />
+					<Route path="dashboard" element={<Dashboard />} />
+					<Route path="suppliers" element={<Suppliers />} />
+					<Route path="suppliers/:id" element={<SupplierDetail />} />
+					<Route path="upload" element={<OperatorRoute><Upload /></OperatorRoute>} />
+					<Route path="documents" element={<Documents />} />
+					<Route path="documents/:id" element={<DocumentDetail />} />
+				</Route>
+				<Route path="*" element={<Navigate to="/dashboard" replace />} />
+			</Routes>
+		</BrowserRouter>
+	)
 }

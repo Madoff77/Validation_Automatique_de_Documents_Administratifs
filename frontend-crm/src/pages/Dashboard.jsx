@@ -47,7 +47,6 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
@@ -60,8 +59,6 @@ export default function Dashboard() {
           </Link>
         )}
       </div>
-
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard icon={FileText}     label="Total documents"  value={stats?.total_documents}    color="blue"   loading={loadingStats} />
         <StatCard icon={CheckCircle}  label="Traités"          value={stats?.documents_processed} color="green"  loading={loadingStats} sub={`${stats ? Math.round(stats.documents_processed / Math.max(stats.total_documents, 1) * 100) : 0}%`} />
@@ -75,8 +72,6 @@ export default function Dashboard() {
         <StatCard icon={XCircle}       label="Critiques"        value={stats?.critical_anomalies}   color="red"    loading={loadingStats} />
         <StatCard icon={TrendingUp}    label="Expire bientôt"   value={stats?.documents_expiring_soon} color="yellow" loading={loadingStats} />
       </div>
-
-      {/* Documents récents */}
       <div className="card">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900">Documents récents</h2>

@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Dépendances système : Tesseract 5, Poppler, OpenCV deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-fra \
@@ -17,14 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Installer dépendances Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code
 COPY . .
 
-# Créer dossier modèles ML
 RUN mkdir -p /app/models/trained
 
 # Variables d'environnement par défaut

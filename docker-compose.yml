@@ -231,6 +231,7 @@ services:
       AIRFLOW_URL: http://airflow-webserver:8080
       AIRFLOW_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
       AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      INSEE_API_KEY: ${INSEE_API_KEY:-}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       CORS_ORIGINS: "http://localhost:5173,http://localhost:5174,http://frontend-crm:80,http://frontend-compliance:80"

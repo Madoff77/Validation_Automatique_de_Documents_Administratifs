@@ -6,7 +6,6 @@ import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
-const SEVERITY_COLORS = { error: '#ef4444', warning: '#f59e0b', info: '#3b82f6' }
 const COMPLIANCE_COLORS = {
   compliant: '#22c55e', warning: '#f59e0b', non_compliant: '#ef4444', pending: '#94a3b8'
 }
@@ -76,8 +75,6 @@ export default function Dashboard() {
           <span className="text-sm font-semibold text-gray-700">{complianceRate}% conformes</span>
         </div>
       </div>
-
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard icon={XCircle}      label="Anomalies critiques"  value={stats?.critical_anomalies}   color="red"    loading={isLoading} sub="erreurs bloquantes" />
         <StatCard icon={AlertTriangle} label="Non résolues"        value={stats?.unresolved_anomalies} color="orange" loading={isLoading} />
@@ -86,7 +83,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* Anomalies récentes */}
         <div className="col-span-2 card">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -120,8 +116,6 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-
-        {/* Graphique conformité */}
         <div className="card p-5">
           <h2 className="font-semibold text-gray-900 mb-4">Conformité fournisseurs</h2>
           {suppliers.length === 0 ? (
