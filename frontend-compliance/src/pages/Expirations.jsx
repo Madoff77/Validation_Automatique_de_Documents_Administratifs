@@ -85,7 +85,7 @@ export default function Expirations() {
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Expirations</h1>
+          <h1 className="font-prata text-2xl font-bold text-gray-900">Expirations</h1>
           <p className="text-sm text-gray-500 mt-0.5">Documents à renouveler prochainement</p>
         </div>
         {total > 0 && (

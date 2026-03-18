@@ -26,6 +26,7 @@ import {
 import DocumentViewer from "../components/DocumentViewer";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 function FieldRow({ icon: Icon, label, value, highlight }) {
     if (!value) return null;
@@ -154,9 +155,8 @@ export default function DocumentDetail() {
 
                 <div className="flex items-center gap-2 shrink-0">
                     {isError && (
-                        <button
+                        <Button variant="descructive"
                             onClick={() => reprocessMutation.mutate()}
-                            className="btn-secondary"
                         >
                             {reprocessMutation.isPending ? (
                                 <Loader2 size={15} className="animate-spin" />
@@ -164,22 +164,20 @@ export default function DocumentDetail() {
                                 <RefreshCw size={15} />
                             )}
                             Relancer
-                        </button>
+                        </Button>
                     )}
-                    <button
-                        onClick={() => setShowViewer(true)}
-                        className="btn-secondary"
-                    >
+                    <Button variant="outline" onClick={() => setShowViewer(true)}>
                         <Eye size={15} /> Visualiser
-                    </button>
-                    <a
-                        href={documentsApi.getDownloadUrl(id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-secondary"
-                    >
-                        <Download size={15} /> Télécharger
-                    </a>
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <a
+                            href={documentsApi.getDownloadUrl(id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <Download size={15} /> Télécharger
+                        </a>
+                    </Button>
                 </div>
             </div>
             {inProgress && (

@@ -90,6 +90,7 @@ SUPPLIERS = [
     },
 ]
 
+
 async def seed_users(db):
     print("\n── Utilisateurs ──────────────────────────────")
     for u in USERS:

@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import clsx from "clsx";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 const NAV = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
@@ -32,11 +33,11 @@ export default function Sidebar() {
         <aside className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
             <div className="px-6 py-5 border-b border-gray-800">
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                        <FileCheck2 size={18} className="text-white" />
+                    <div className="w-8 h-8 bg-background rounded-lg flex items-center justify-center">
+                        <FileCheck2 size={18} className="text-primary" />
                     </div>
                     <div>
-                        <p className="font-bold text-sm leading-tight">
+                        <p className="font-prata font-bold text-sm leading-tight">
                             DocPlatform
                         </p>
                         <p className="text-xs text-gray-400 leading-tight">
@@ -73,14 +74,13 @@ export default function Sidebar() {
                     <p className="text-sm font-medium text-white truncate">{user?.full_name || user?.username}</p>
                     <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
                 </div>
-                <button
+                <Button
+                    variant="ghost"
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                     text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+                    className="justify-start w-full text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
                 >
-                    <LogOut size={18} />
-                    Déconnexion
-                </button>
+                    <LogOut size={18} /> Déconnexion
+                </Button>
             </div>
         </aside>
     );

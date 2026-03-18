@@ -13,6 +13,9 @@ import { suppliersApi } from "../api/suppliers";
 import { ComplianceBadge } from "../components/StatusBadge";
 import { usePermissions } from "../hooks/usePermissions";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 function CreateModal({ onClose }) {
     const qc = useQueryClient();
@@ -64,8 +67,8 @@ function CreateModal({ onClose }) {
                 >
                     <div>
                         <label className="label">Raison sociale *</label>
-                        <input
-                            className="input"
+                        <Input
+                            id="name"
                             value={form.name}
                             onChange={set("name")}
                             required
@@ -74,8 +77,8 @@ function CreateModal({ onClose }) {
                     </div>
                     <div>
                         <label className="label">SIRET</label>
-                        <input
-                            className="input"
+                        <Input
+                            id="siret"
                             value={form.siret}
                             onChange={set("siret")}
                             placeholder="73282932000074"
@@ -86,8 +89,8 @@ function CreateModal({ onClose }) {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="label">Email</label>
-                            <input
-                                className="input"
+                            <Input
+                                id="email"
                                 type="email"
                                 value={form.email}
                                 onChange={set("email")}
@@ -95,8 +98,8 @@ function CreateModal({ onClose }) {
                         </div>
                         <div>
                             <label className="label">Téléphone</label>
-                            <input
-                                className="input"
+                            <Input
+                                id="phone"
                                 value={form.phone}
                                 onChange={set("phone")}
                             />
@@ -104,30 +107,23 @@ function CreateModal({ onClose }) {
                     </div>
                     <div>
                         <label className="label">Adresse</label>
-                        <input
-                            className="input"
+                        <Input
+                            id="address"
                             value={form.address}
                             onChange={set("address")}
                         />
                     </div>
                     <div className="flex gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="btn-secondary flex-1 justify-center"
-                        >
-                            Annuler
-                        </button>
-                        <button
+                        <Button variant="outline" onClick={onClose}>Annuler</Button>
+                        <Button
                             type="submit"
-                            className="btn-primary flex-1 justify-center"
                             disabled={mutation.isPending}
                         >
                             {mutation.isPending ? (
                                 <Loader2 size={15} className="animate-spin" />
                             ) : null}
                             Créer
-                        </button>
+                        </Button>
                     </div>
                 </form>
             </div>
@@ -149,7 +145,7 @@ export default function Suppliers() {
         <div className="p-8 max-w-5xl mx-auto">
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
+                    <h1 className="font-prata text-2xl font-bold text-gray-900">
                         Fournisseurs
                     </h1>
                     <p className="text-sm text-gray-500 mt-0.5">
@@ -158,26 +154,23 @@ export default function Suppliers() {
                     </p>
                 </div>
                 {canCreateSupplier && (
-                    <button
-                        onClick={() => setShowCreate(true)}
-                        className="btn-primary"
-                    >
+                    <Button onClick={() => setShowCreate(true)}>
                         <Plus size={16} /> Nouveau fournisseur
-                    </button>
+                    </Button>
                 )}
             </div>
-            <div className="relative mb-6">
+            <Field className="mb-4 w-full max-w-sm">
                 <Search
                     size={16}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 />
-                <input
-                    className="input pl-9 max-w-sm"
+                <Input
+                    id="search"
                     placeholder="Rechercher par nom ou SIRET…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                 />
-            </div>
+            </Field>
             <div className="card divide-y divide-gray-50">
                 {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (

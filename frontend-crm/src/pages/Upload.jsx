@@ -9,12 +9,23 @@ import {
     CheckCircle,
     AlertCircle,
     Loader2,
-    ArrowLeft
+    ArrowLeft,
 } from "lucide-react";
-import { suppliersApi } from "../api/suppliers";
-import { documentsApi } from "../api/documents";
+import { suppliersApi } from "@/api/suppliers";
+import { documentsApi } from "@/api/documents";
 import clsx from "clsx";
+
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 const ACCEPT = {
     "application/pdf": [".pdf"],
@@ -37,7 +48,7 @@ export default function Upload() {
     const [supplierId, setSupplierId] = useState(preselected || "");
     const [files, setFiles] = useState([]); // [{file, status, progress, error, docId}]
 
-    const { data: suppliers = [] } = useQuery({
+    const { data: suppliers = [], isLoading: suppliersLoading } = useQuery({
         queryKey: ["suppliers"],
         queryFn: () => suppliersApi.list(),
     });
@@ -129,34 +140,50 @@ export default function Upload() {
 
     return (
         <div className="p-8 max-w-3xl mx-auto">
-            <Link
-                to="/suppliers"
-                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
-            >
-                <ArrowLeft size={15} /> Retour
-            </Link>
+            <Button variant="ghost" className="mb-6" asChild>
+                <Link
+                    to="/suppliers"
+                >
+                    <ArrowLeft size={15} /> Retour
+                </Link>
+            </Button>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+            <h1 className="font-prata text-2xl font-bold text-gray-900 mb-1">
                 Importer des documents
             </h1>
             <p className="text-sm text-gray-500 mb-8">
                 Formats supportés : PDF, JPEG, PNG, TIFF — Max 50 Mo par fichier
             </p>
-            <div className="card p-5 mb-6">
-                <label className="label">Fournisseur *</label>
-                <select
-                    className="input"
-                    value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
+            <Field className="w-full max-w-64 mb-6">
+                <FieldLabel>Fournisseur</FieldLabel>
+                <Select
+                    value={supplierId || undefined}
+                    onValueChange={setSupplierId}
+                    disabled={suppliersLoading || suppliers.length === 0}
                 >
-                    <option value="">— Sélectionner un fournisseur —</option>
-                    {suppliers.map((s) => (
-                        <option key={s.supplier_id} value={s.supplier_id}>
-                            {s.name}
-                        </option>
-                    ))}
-                </select>
-            </div>
+                    <SelectTrigger aria-invalid={!supplierId}>
+                        <SelectValue placeholder="Sélectionner un fournisseur" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {suppliers.length === 0 ? (
+                                <SelectItem value="no-supplier" disabled>
+                                    Aucun fournisseur disponible
+                                </SelectItem>
+                            ) : (
+                                suppliers.map((s) => (
+                                    <SelectItem
+                                        key={s.supplier_id}
+                                        value={String(s.supplier_id)}
+                                    >
+                                        {s.name}
+                                    </SelectItem>
+                                ))
+                            )}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </Field>
             <div
                 {...getRootProps()}
                 className={clsx(
@@ -198,12 +225,14 @@ export default function Upload() {
                                 </span>
                             )}
                         </span>
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="xs"
                             onClick={() => setFiles([])}
                             className="text-xs text-gray-400 hover:text-gray-600"
                         >
                             Tout effacer
-                        </button>
+                        </Button>
                     </div>
                     <div className="divide-y divide-gray-50">
                         {files.map((item) => (
@@ -270,14 +299,13 @@ export default function Upload() {
                           ? "Tous les fichiers ont été envoyés"
                           : "Aucun fichier sélectionné"}
                 </p>
-                <button
+                <Button
                     onClick={uploadAll}
                     disabled={!pendingCount || !supplierId}
-                    className="btn-primary"
                 >
                     <UploadIcon size={15} />
                     Envoyer {pendingCount > 0 ? `(${pendingCount})` : ""}
-                </button>
+                </Button>
             </div>
         </div>
     );

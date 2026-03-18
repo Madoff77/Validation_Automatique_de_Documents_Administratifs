@@ -18,6 +18,8 @@ import { formatDistanceToNow, format } from "date-fns";
 import { fr } from "date-fns/locale";
 import toast from "react-hot-toast";
 import clsx from "clsx";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
 
 const STATUS_CONFIG = {
     compliant: {
@@ -453,23 +455,22 @@ function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
                 </div>
             </div>
             {expanded && (
-                <div className="mt-3 flex gap-2 ml-16">
-                    <input
-                        className="input flex-1 py-1.5 text-sm"
+                <Field className="mt-4">
+                    <Input
+                        id={`resolve-notes-${anomaly.anomaly_id}`}
                         placeholder="Notes (optionnel)…"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                     />
-                    <button
+                    <Button
                         onClick={() => {
                             onResolve(notes);
                             setExpanded(false);
                         }}
-                        className="btn-primary py-1.5 px-3 text-sm"
                     >
                         Confirmer
-                    </button>
-                </div>
+                    </Button>
+                </Field>
             )}
         </div>
     );

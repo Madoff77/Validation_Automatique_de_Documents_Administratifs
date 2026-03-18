@@ -1,8 +1,275 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { FileCheck2, Eye, EyeOff, Loader2 } from "lucide-react";
+import {
+    Eye,
+    EyeOff,
+    Loader2,
+    ScanText,
+    FileText,
+    Receipt,
+    ArrowRight,
+    FileCheck,
+    FileClock,
+    FileSearch,
+} from "lucide-react";
+
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+
+const floatingCards = [
+    {
+        icon: FileCheck,
+        label: "Conformité validée",
+        sub: "KBIS · SIRET · URSSAF",
+        style: {
+            top: "22%",
+            left: "8%",
+            "--rot": "-4deg",
+            "--dur": "11s",
+            "--delay": "0s",
+        },
+    },
+    {
+        icon: ScanText,
+        label: "OCR adaptatif",
+        sub: "Tesseract 5 · pdfplumber",
+        style: {
+            top: "38%",
+            left: "58%",
+            "--rot": "3deg",
+            "--dur": "13s",
+            "--delay": "1.5s",
+        },
+    },
+    {
+        icon: FileClock,
+        label: "Pipeline Airflow",
+        sub: "11 documents traités",
+        style: {
+            top: "55%",
+            left: "8%",
+            "--rot": "-2deg",
+            "--dur": "9s",
+            "--delay": "0.8s",
+        },
+    },
+    {
+        icon: FileSearch,
+        label: "Extraction ML",
+        sub: "TF-IDF · Random Forest",
+        style: {
+            top: "68%",
+            left: "70%",
+            "--rot": "5deg",
+            "--dur": "14s",
+            "--delay": "2s",
+        },
+    },
+    {
+        icon: Receipt,
+        label: "FACTURE #2024-089",
+        sub: "Montant HT · TVA · IBAN",
+        style: {
+            top: "16%",
+            left: "48%",
+            "--rot": "2deg",
+            "--dur": "12s",
+            "--delay": "0.4s",
+        },
+    },
+    {
+        icon: FileText,
+        label: "Kbis — BTP Solutions",
+        sub: "Validé · < 90 jours",
+        style: {
+            top: "43%",
+            left: "25%",
+            "--rot": "-3deg",
+            "--dur": "10s",
+            "--delay": "1.2s",
+        },
+    },
+];
+
+function GridOverlay() {
+    return (
+        <svg
+            className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <defs>
+                <pattern
+                    id="grid"
+                    width="48"
+                    height="48"
+                    patternUnits="userSpaceOnUse"
+                >
+                    <path
+                        d="M 48 0 L 0 0 0 48"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="0.8"
+                    />
+                </pattern>
+            </defs>
+            <rect
+                width="100%"
+                height="100%"
+                fill="url(#grid)"
+                className="text-primary"
+            />
+        </svg>
+    );
+}
+
+function BlobsOverlay() {
+    return (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div
+                className="absolute rounded-full blur-[90px] opacity-25"
+                style={{
+                    width: 340,
+                    height: 340,
+                    top: "-80px",
+                    left: "-60px",
+                    background: "var(--primary)",
+                }}
+            />
+            <div
+                className="absolute rounded-full blur-[120px] opacity-15"
+                style={{
+                    width: 280,
+                    height: 280,
+                    bottom: "60px",
+                    right: "-40px",
+                    background: "var(--chart-2)",
+                }}
+            />
+            <div
+                className="absolute rounded-full blur-[80px] opacity-10"
+                style={{
+                    width: 200,
+                    height: 200,
+                    top: "45%",
+                    left: "35%",
+                    background: "var(--chart-3)",
+                }}
+            />
+        </div>
+    );
+}
+
+function FloatingCard({ icon: Icon, label, sub, style }) {
+    return (
+        <div
+            className="bubble-float absolute flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border border-border/60 backdrop-blur-sm"
+            style={{
+                ...style,
+                background: "color-mix(in oklch, var(--card) 80%, transparent)",
+                minWidth: 200,
+            }}
+        >
+            <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                    background:
+                        "color-mix(in oklch, var(--primary) 12%, transparent)",
+                }}
+            >
+                <Icon size={15} style={{ color: "var(--primary)" }} />
+            </div>
+            <div>
+                <div
+                    className="text-xs font-semibold leading-tight"
+                    style={{ color: "var(--foreground)" }}
+                >
+                    {label}
+                </div>
+                <div
+                    className="text-[10px] leading-tight mt-0.5"
+                    style={{ color: "var(--muted-foreground)" }}
+                >
+                    {sub}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ConnectorLines() {
+    return (
+        <svg
+            className="absolute inset-0 w-full h-full pointer-events-none opacity-20"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <line
+                x1="18%"
+                y1="26%"
+                x2="34%"
+                y2="45%"
+                stroke="var(--primary)"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+            />
+            <line
+                x1="34%"
+                y1="45%"
+                x2="62%"
+                y2="42%"
+                stroke="var(--primary)"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+            />
+            <line
+                x1="62%"
+                y1="22%"
+                x2="62%"
+                y2="42%"
+                stroke="var(--primary)"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+            />
+            <line
+                x1="18%"
+                y1="58%"
+                x2="34%"
+                y2="45%"
+                stroke="var(--primary)"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+            />
+            <line
+                x1="75%"
+                y1="70%"
+                x2="34%"
+                y2="45%"
+                stroke="var(--primary)"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+            />
+            {[
+                ["18%", "26%"],
+                ["34%", "45%"],
+                ["62%", "42%"],
+                ["62%", "22%"],
+                ["18%", "58%"],
+                ["75%", "70%"],
+            ].map(([cx, cy], i) => (
+                <circle
+                    key={i}
+                    cx={cx}
+                    cy={cy}
+                    r="3"
+                    fill="var(--primary)"
+                    opacity="0.6"
+                />
+            ))}
+        </svg>
+    );
+}
 
 export default function Login() {
     const { login } = useAuth();
@@ -36,89 +303,154 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen bg-linear-to-br from-gray-900 via-gray-800 to-primary-900 flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-2xl mb-4 shadow-xs-lg">
-                        <FileCheck2 size={32} className="text-white" />
+        <div className="min-h-screen grid grid-cols-2 overflow-hidden max-[820px]:grid-cols-1">
+            <div
+                className="relative overflow-hidden flex flex-col justify-end p-14 max-[820px]:hidden"
+                style={{ background: "var(--secondary)" }}
+            >
+                <GridOverlay />
+                <BlobsOverlay />
+                <ConnectorLines />
+                {floatingCards.map((card) => (
+                    <FloatingCard key={card.label} {...card} />
+                ))}
+                <div className="absolute top-10 left-14 z-10 flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shadow-md shrink-0 bg-primary">
+                        <ScanText size={18} color="white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-white">DocPlatform</h1>
-                    <p className="text-gray-400 text-sm mt-1">CRM — Gestion documentaire</p>
-                </div>
-                <div className="bg-white rounded-2xl shadow-xs-2xl p-8">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-6">Connexion</h2>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="label">Nom d'utilisateur</label>
-                            <input
-                                className="input"
-                                type="text"
-                                placeholder="admin"
-                                value={form.username}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        username: e.target.value,
-                                    })
-                                }
-                                required
-                                autoFocus
-                            />
+                    <div>
+                        <div className="font-prata font-semibold text-base leading-tight">
+                            DocPlatform
                         </div>
-                        <div>
-                            <label className="label">Mot de passe</label>
-                            <div className="relative">
-                                <input
-                                    className="input pr-10"
-                                    type={showPwd ? "text" : "password"}
-                                    placeholder="••••••••"
-                                    value={form.password}
+                        <div className="text-xs tracking-tighter text-muted-foreground">
+                            CRM
+                        </div>
+                    </div>
+                </div>
+                <div className="relative z-10">
+                    <h2 className="font-prata leading-[1.3] mb-3.5 font-semibold text-5xl">
+                        Vos documents,
+                        <br />
+                        <em className="not-italic text-muted-foreground">
+                            compris
+                        </em>{" "}
+                        en
+                        <br />
+                        quelques secondes.
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                        Extraction intelligente · Classification automatique ·
+                        Conformité garantie
+                    </p>
+                </div>
+            </div>
+            <div className="flex items-center justify-center px-10 py-12 relative">
+                <div className="grid gap-7 form-in w-full max-w-100">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="header-dot w-1.5 h-1.5 rounded-full bg-primary" />
+                            <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+                                CRM
+                            </span>
+                        </div>
+                        <h1 className="font-prata text-[2rem] font-semibold leading-snug mb-1.5">
+                            Connexion
+                        </h1>
+                        <p className="text-xs text-muted-foreground leading-normal">
+                            Entrez vos identifiants pour accéder à votre espace
+                        </p>
+                    </div>
+                    <form onSubmit={handleSubmit}>
+                        <FieldGroup>
+                            <Field>
+                                <FieldLabel htmlFor="username">
+                                    Nom d'utilisateur
+                                </FieldLabel>
+                                <Input
+                                    id="username"
+                                    type="text"
+                                    placeholder="ex : martin.dupont"
+                                    value={form.username}
                                     onChange={(e) =>
                                         setForm({
                                             ...form,
-                                            password: e.target.value,
+                                            username: e.target.value,
                                         })
                                     }
                                     required
+                                    autoFocus
+                                    autoComplete="username"
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPwd(!showPwd)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            </Field>
+                            <Field>
+                                <FieldLabel htmlFor="password">
+                                    Mot de passe
+                                </FieldLabel>
+                                <div className="relative">
+                                    <Input
+                                        id="password"
+                                        type={showPwd ? "text" : "password"}
+                                        placeholder="••••••••"
+                                        value={form.password}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                password: e.target.value,
+                                            })
+                                        }
+                                        autoComplete="current-password"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPwd(!showPwd)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-transparent text-primary border-none cursor-pointer p-0 flex items-center transition-colors duration-150"
+                                    >
+                                        {showPwd ? (
+                                            <EyeOff size={15} />
+                                        ) : (
+                                            <Eye size={15} />
+                                        )}
+                                    </button>
+                                </div>
+                            </Field>
+                            <Field orientation="horizontal">
+                                <Button
+                                    type="submit"
+                                    size="lg"
+                                    disabled={loading}
+                                    className="w-full"
                                 >
-                                    {showPwd ? (
-                                        <EyeOff size={16} />
+                                    {loading ? (
+                                        <>
+                                            <Loader2
+                                                size={15}
+                                                className="spin"
+                                            />
+                                            Connexion…
+                                        </>
                                     ) : (
-                                        <Eye size={16} />
+                                        <>
+                                            <span>Se connecter</span>
+                                            <ArrowRight size={15} />
+                                        </>
                                     )}
-                                </button>
-                            </div>
-                        </div>
-
-                        <button
-                            type="submit"
-                            className="btn-primary w-full justify-center py-2.5"
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <Loader2 size={16} className="animate-spin" />
-                            ) : null}
-                            {loading ? "Connexion…" : "Se connecter"}
-                        </button>
+                                </Button>
+                            </Field>
+                        </FieldGroup>
                     </form>
-                    <div className="mt-6 pt-5 border-t border-gray-100">
-                        <p className="text-xs text-gray-500 text-center mb-3">Accès rapide démo</p>
-                        <div className="flex gap-2">
-                            {["admin", "operator", "viewer"].map((role) => (
-                                <button
-                                    key={role}
-                                    onClick={() => fillDemo(role)}
-                                    className="flex-1 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 capitalize transition-colors"
-                                >
-                                    {role}
-                                </button>
-                            ))}
-                        </div>
+                    <div className="flex gap-2">
+                        {["admin", "operator", "viewer"].map((role) => (
+                            <Button
+                                key={role}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 text-xs capitalize"
+                                onClick={() => fillDemo(role)}
+                            >
+                                {role}
+                            </Button>
+                        ))}
                     </div>
                 </div>
             </div>

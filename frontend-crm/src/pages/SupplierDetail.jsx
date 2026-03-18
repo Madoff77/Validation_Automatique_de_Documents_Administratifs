@@ -10,22 +10,21 @@ import {
     Wand2,
     Upload,
     FileText,
-    AlertTriangle,
-    CheckCircle,
     Loader2,
     RefreshCw,
 } from "lucide-react";
-import { suppliersApi } from "../api/suppliers";
-import { documentsApi } from "../api/documents";
+import { suppliersApi } from "@/api/suppliers";
+import { documentsApi } from "@/api/documents";
 import {
     ComplianceBadge,
     DocTypeBadge,
     DocStatusBadge,
-} from "../components/StatusBadge";
-import { usePermissions } from "../hooks/usePermissions";
-import { formatDistanceToNow, format } from "date-fns";
-import { fr } from "date-fns/locale";
+} from "@/components/StatusBadge";
+import { usePermissions } from "@/hooks/usePermissions";
+import { format } from "date-fns";
+
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 // ── Champ de formulaire éditable ─────────────────────────────
 function Field({
@@ -222,9 +221,9 @@ export default function SupplierDetail() {
                     {!editing ? (
                         <>
                             {canEditSupplier && (
-                                <button
+                                <Button
+                                    variant="outline"
                                     onClick={handleAutoFill}
-                                    className="btn-secondary"
                                     disabled={autoFilling}
                                     title="Remplir automatiquement depuis les documents traités"
                                 >
@@ -237,36 +236,28 @@ export default function SupplierDetail() {
                                         <Wand2 size={15} />
                                     )}
                                     Auto-remplir
-                                </button>
+                                </Button>
                             )}
                             {canEditSupplier && (
-                                <button
-                                    onClick={startEdit}
-                                    className="btn-secondary"
-                                >
+                                <Button variant="outline" onClick={startEdit}>
                                     <Edit3 size={15} /> Modifier
-                                </button>
+                                </Button>
                             )}
                             {canUpload && (
-                                <Link
-                                    to={`/upload?supplier=${id}`}
-                                    className="btn-primary"
-                                >
-                                    <Upload size={15} /> Ajouter document
-                                </Link>
+                                <Button asChild>
+                                    <Link to={`/upload?supplier=${id}`}>
+                                        <Upload size={15} /> Ajouter document
+                                    </Link>
+                                </Button>
                             )}
                         </>
                     ) : (
                         <>
-                            <button
-                                onClick={cancelEdit}
-                                className="btn-secondary"
-                            >
+                            <Button variant="outline" onClick={cancelEdit}>
                                 <X size={15} /> Annuler
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 onClick={saveEdit}
-                                className="btn-primary"
                                 disabled={updateMutation.isPending}
                             >
                                 {updateMutation.isPending ? (
@@ -278,7 +269,7 @@ export default function SupplierDetail() {
                                     <Save size={15} />
                                 )}
                                 Enregistrer
-                            </button>
+                            </Button>
                         </>
                     )}
                 </div>
@@ -380,12 +371,11 @@ export default function SupplierDetail() {
                                     Aucun document importé
                                 </p>
                                 {canUpload && (
-                                    <Link
-                                        to={`/upload?supplier=${id}`}
-                                        className="btn-primary mt-4 inline-flex"
-                                    >
-                                        <Upload size={14} /> Importer
-                                    </Link>
+                                    <Button asChild>
+                                        <Link to={`/upload?supplier=${id}`}>
+                                            <Upload size={14} /> Importer
+                                        </Link>
+                                    </Button>
                                 )}
                             </div>
                         ) : (
@@ -491,13 +481,12 @@ export default function SupplierDetail() {
                             {!supplier.siret &&
                                 !supplier.tva_number &&
                                 canEditSupplier && (
-                                    <button
+                                    <Button variant="outline"
                                         onClick={handleAutoFill}
-                                        className="btn-secondary w-full justify-center text-xs mt-2"
                                     >
                                         <Wand2 size={12} /> Remplir depuis les
                                         documents
-                                    </button>
+                                    </Button>
                                 )}
                         </div>
                     )}

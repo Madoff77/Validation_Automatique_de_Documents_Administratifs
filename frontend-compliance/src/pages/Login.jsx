@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
-import { Field, FieldLabel } from "@/components/ui/field";
+
+import { Eye, EyeOff, Loader2, ScanText, ArrowRight } from "lucide-react";
+
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 
 export default function Login() {
     const { login } = useAuth();
@@ -29,46 +31,56 @@ export default function Login() {
         }
     };
 
-    const fill = (role) => {
-        setForm(
-            role === "admin"
-                ? { username: "admin", password: "admin123" }
-                : role === "operator"
-                  ? { username: "operator", password: "operator123" }
-                  : { username: "viewer", password: "viewer123" },
-        );
+    const fillDemo = (role) => {
+        const creds = {
+            admin: { username: "admin", password: "admin123" },
+            operator: { username: "operator", password: "operator123" },
+            viewer: { username: "viewer", password: "viewer123" },
+        };
+        setForm(creds[role]);
     };
 
     return (
-        <div className="min-h-screen bg-linear-to-br from-gray-900 via-gray-800 to-orange-900 flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-2xl mb-4 shadow-xs-lg">
-                        <Shield size={32} className="text-white" />
-                    </div>
-                    <h1 className="text-2xl font-bold text-white">
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
+            <div className="absolute top-6 left-6 z-10 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shadow-md shrink-0 bg-primary">
+                    <ScanText size={18} color="white" />
+                </div>
+                <div>
+                    <div className="font-prata font-semibold text-base leading-tight">
                         DocPlatform
-                    </h1>
-                    <p className="text-gray-400 text-sm mt-1">
+                    </div>
+                    <div className="text-xs tracking-tighter text-muted-foreground">
                         Outil de Conformité
+                    </div>
+                </div>
+            </div>
+            <div className="form-in mt-16 grid w-full max-w-100 gap-6 px-1 sm:mt-0 sm:gap-7 sm:px-0">
+                <div className="px-1 sm:px-0">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="header-dot w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+                            Outil de Conformité
+                        </span>
+                    </div>
+                    <h1 className="mb-1.5 font-prata text-[1.75rem] font-semibold leading-snug sm:text-[2rem]">
+                        Connexion
+                    </h1>
+                    <p className="text-xs text-muted-foreground leading-normal">
+                        Entrez vos identifiants pour accéder à votre espace
                     </p>
                 </div>
-                <div className="bg-white rounded-2xl shadow-xs-2xl p-8">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-6">
-                        {" "}
-                        Connexion
-                    </h2>
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="px-1 sm:px-0">
+                    <FieldGroup>
                         <Field>
-                            <FieldLabel htmlFor="input-field-username">
+                            <FieldLabel htmlFor="username">
                                 Nom d'utilisateur
                             </FieldLabel>
                             <Input
-                                id="input-field-username"
+                                id="username"
                                 type="text"
-                                placeholder="admin"
+                                placeholder="ex : martin.dupont"
                                 value={form.username}
-                                autocomplete="username"
                                 onChange={(e) =>
                                     setForm({
                                         ...form,
@@ -77,15 +89,16 @@ export default function Login() {
                                 }
                                 required
                                 autoFocus
+                                autoComplete="username"
                             />
                         </Field>
                         <Field>
-                            <FieldLabel htmlFor="input-field-password">
+                            <FieldLabel htmlFor="password">
                                 Mot de passe
                             </FieldLabel>
                             <div className="relative">
                                 <Input
-                                    className="pr-10"
+                                    id="password"
                                     type={showPwd ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={form.password}
@@ -95,53 +108,59 @@ export default function Login() {
                                             password: e.target.value,
                                         })
                                     }
+                                    autoComplete="current-password"
                                     required
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPwd(!showPwd)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-transparent text-primary border-none cursor-pointer p-0 flex items-center transition-colors duration-150"
                                 >
                                     {showPwd ? (
-                                        <EyeOff size={16} />
+                                        <EyeOff size={15} />
                                     ) : (
-                                        <Eye size={16} />
+                                        <Eye size={15} />
                                     )}
                                 </button>
                             </div>
                         </Field>
-                        <Button type="submit" disabled={loading}>
-                            {loading ? (
-                                <>
-                                    <Loader2
-                                        size={16}
-                                        className="animate-spin mr-2"
-                                    />
-                                    Connexion…
-                                </>
-                            ) : (
-                                "Se connecter"
-                            )}
+                        <Field orientation="horizontal">
+                            <Button
+                                type="submit"
+                                size="lg"
+                                disabled={loading}
+                                className="w-full"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2
+                                            size={15}
+                                            className="spin"
+                                        />
+                                        Connexion…
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Se connecter</span>
+                                        <ArrowRight size={15} />
+                                    </>
+                                )}
+                            </Button>
+                        </Field>
+                    </FieldGroup>
+                </form>
+                <div className="grid grid-cols-1 gap-2 px-1 sm:grid-cols-3 sm:px-0">
+                    {["admin", "operator", "viewer"].map((role) => (
+                        <Button
+                            key={role}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 text-xs capitalize"
+                            onClick={() => fillDemo(role)}
+                        >
+                            {role}
                         </Button>
-                    </form>
-                    <div className="mt-6 pt-5 border-t border-gray-100">
-                        <p className="text-xs text-gray-500 text-center mb-3">
-                            Accès rapide démo
-                        </p>
-                        <div className="flex gap-2">
-                            {["admin", "operator", "viewer"].map((r) => (
-                                <Button
-                                    key={r}
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => fill(r)}
-                                    className="flex-1 capitalize"
-                                >
-                                    {r}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
+                    ))}
                 </div>
             </div>
         </div>
