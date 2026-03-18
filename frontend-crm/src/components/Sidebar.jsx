@@ -1,19 +1,26 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, Upload, FileText, LogOut, ChevronRight, FileCheck2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import clsx from "clsx";
 import { toast } from "sonner";
 
 const NAV = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
     { to: "/suppliers", icon: Users, label: "Fournisseurs" },
-    { to: "/upload", icon: Upload, label: "Importer" },
+    { to: "/upload", icon: Upload, label: "Importer", permission: "canUpload" },
     { to: "/documents", icon: FileText, label: "Documents" },
 ];
 
 export default function Sidebar() {
     const { user, logout } = useAuth();
+    const permissions = usePermissions();
     const navigate = useNavigate();
+
+    const visibleNav = NAV.filter((item) => {
+        if (!item.permission) return true;
+        return Boolean(permissions[item.permission]);
+    });
 
     const handleLogout = async () => {
         await logout();
@@ -39,7 +46,7 @@ export default function Sidebar() {
                 </div>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1">
-                {NAV.map(({ to, icon: Icon, label }) => (
+                {visibleNav.map(({ to, icon: Icon, label }) => (
                     <NavLink
                         key={to}
                         to={to}

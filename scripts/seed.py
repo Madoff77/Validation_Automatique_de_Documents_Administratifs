@@ -90,7 +90,6 @@ SUPPLIERS = [
     },
 ]
 
-
 async def seed_users(db):
     print("\n── Utilisateurs ──────────────────────────────")
     for u in USERS:
@@ -111,7 +110,6 @@ async def seed_users(db):
             "updated_at": now,
         })
         print(f"  ✓ {u['username']} ({u['role']}) — mot de passe: {u['password']}")
-
 
 async def seed_suppliers(db, real_companies):
     print("\n── Fournisseurs ──────────────────────────────")
