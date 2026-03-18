@@ -30,11 +30,20 @@ import cv2
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+# Chercher le .env depuis plusieurs emplacements possibles (local, Docker /app, /app/data-generator)
+_env_candidates = [
+    os.path.join(os.path.dirname(__file__), "../.env"),  # local : racine projet
+    "/app/.env",                                          # Docker : racine container
+    os.path.join(os.path.dirname(__file__), ".env"),     # fallback : même dossier
+]
+for _env_path in _env_candidates:
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+        break
 
 API_KEY = os.getenv("INSEE_API_KEY")
 if not API_KEY:
-    print("Clé API SIRENE non trouvée. Veuillez définir INSEE_API_KEY dans votre .env.")
+    print("[WARN] INSEE_API_KEY non trouvée — fallback sur génération synthétique.")
 
 fake = Faker("fr_FR")
 Faker.seed(42)

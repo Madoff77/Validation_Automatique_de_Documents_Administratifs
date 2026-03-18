@@ -463,7 +463,14 @@ Ces tokens sont en majuscules et très spécifiques — même avec 60% de bruit 
 
 Les documents administratifs réels contiennent des données personnelles (IBAN, SIRET, noms). On ne peut pas les utiliser sans consentement RGPD et anonymisation complexe.
 
-Les données synthétiques générées par `Faker` sont réalistes (SIRET valides via Luhn, IBAN valides via MOD-97, montants cohérents) et représentent toutes les variations importantes. En production, on utiliserait les vrais documents des premiers clients (avec accord contractuel) pour fine-tuner le modèle.
+**Ce que nous faisons maintenant est un hybride** : le générateur appelle l'**API SIRENE de l'INSEE** (`api.insee.fr/api-sirene`) pour récupérer des entreprises réelles actives (nom, SIRET, SIREN, adresse). Ces données réelles sont injectées dans des templates de documents synthétiques — les textes sont construits par nos templates, mais les identifiants d'entreprises sont authentiques et vérifiables.
+
+Ce choix donne le meilleur des deux mondes :
+- **Réalisme** : SIRETs réels passant le contrôle Luhn, noms d'entreprises cohérents avec le registre
+- **Conformité RGPD** : données publiques du répertoire SIRENE, sans données personnelles sensibles (pas de données bancaires réelles, pas de contrats réels)
+- **Variabilité** : pool de 200 entreprises réelles tirées aléatoirement pour chaque document généré
+
+En production, on utiliserait les vrais documents des premiers clients (avec accord contractuel) pour fine-tuner le modèle.
 
 ---
 
@@ -722,4 +729,34 @@ Centraliser dans un hook évite la duplication de logique conditionnelle dans ch
 
 ---
 
-*Document préparé pour la soutenance jury — S19 Hackathon — IPSSI 2024*
+### Pourquoi le visualiseur de documents retourne un flux binaire et non une URL présignée ?
+
+L'implémentation initiale retournait une **URL présignée MinIO** que le frontend chargeait directement dans un `<iframe>`. En pratique, cette approche posait deux problèmes :
+
+1. **Réseau interne Docker** : MinIO expose ses URLs sur `minio:9000` (réseau Docker interne). Le navigateur de l'utilisateur ne peut pas résoudre ce hostname — l'iframe restait vide.
+2. **CORS** : MinIO nécessite une configuration CORS explicite pour autoriser les requêtes cross-origin depuis `localhost:5173`.
+
+**Solution adoptée** : le backend agit comme proxy — `GET /documents/{id}/view` récupère le fichier depuis MinIO côté serveur (`download_file()`) et le retourne en `StreamingResponse`. Le frontend charge l'URL du backend (accessible sur `localhost:8000`), qui streame le contenu.
+
+```
+Ancien :  navigateur → URL présignée → MinIO (réseau Docker interne ❌)
+Nouveau : navigateur → backend:8000/view → MinIO (réseau Docker interne ✅)
+```
+
+**Auth retirée sur ces endpoints** : nécessaire pour que `<iframe src="...">` et `<img src="...">` puissent charger les ressources sans injecter un header `Authorization` (les balises HTML natives ne supportent pas les headers).
+
+---
+
+### Pourquoi migrer de `react-hot-toast` vers `sonner` ?
+
+`react-hot-toast` fonctionnait mais n'est plus maintenu activement. `sonner` (par Emil Kowalski, intégré dans shadcn/ui) offre :
+- Meilleure intégration avec shadcn/ui et le design system Tailwind du projet
+- API compatible (`toast.success()`, `toast.error()`) — migration quasi-transparente
+- Animations plus fluides, meilleur support des toasts de promesse (`toast.promise()`)
+- Moins de configuration manuelle pour le positionnement et le style
+
+La migration a été faite en même temps que l'ajout de shadcn/ui (`components.json`, alias `@/`), ce qui aligne tous les composants UI sur un même système.
+
+---
+
+*Document préparé pour la soutenance jury — S19 Hackathon — IPSSI 2026*
