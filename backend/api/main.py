@@ -1,31 +1,3 @@
-"""
-DocPlatform API — Point d'entrée FastAPI
-
-Routes exposées :
-  GET  /health                     → healthcheck
-  POST /auth/login                 → JWT login
-  POST /auth/refresh               → refresh token
-  POST /auth/logout                → logout
-  GET  /auth/me                    → profil courant
-  POST /auth/register              → créer utilisateur (admin)
-
-  GET/POST /suppliers              → liste / créer fournisseur
-  GET/PUT/DELETE /suppliers/{id}   → détail / modifier / supprimer
-  GET /suppliers/{id}/compliance   → vue conformité fournisseur
-
-  POST /documents/upload           → upload document + déclenchement pipeline
-  GET  /documents                  → liste documents (filtrés)
-  GET  /documents/{id}             → détail document
-  GET  /documents/{id}/download    → télécharger (presigned URL)
-  POST /documents/{id}/reprocess   → relancer pipeline
-  DELETE /documents/{id}           → supprimer
-
-  GET  /anomalies                  → liste anomalies
-  PATCH /anomalies/{id}/resolve    → résoudre anomalie
-
-  GET  /stats/dashboard            → stats globales
-"""
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,10 +13,6 @@ from utils.logger import configure_logging, get_logger
 configure_logging()
 logger = get_logger(__name__)
 
-
-# ─────────────────────────────────────────────────────────────
-# LIFESPAN (startup / shutdown)
-# ─────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -67,12 +35,12 @@ async def lifespan(app: FastAPI):
 
 
 async def _ensure_default_admin():
-    """Créer l'admin par défaut au premier démarrage."""
     from storage.mongo_client import get_db
     from api.auth.password import hash_password
     from datetime import datetime, timezone
     import uuid
 
+    #crée un admin par défaut au premire démarrage
     db = await get_db()
     existing = await db.users.find_one({"role": "admin"})
     if existing:
@@ -93,11 +61,7 @@ async def _ensure_default_admin():
     })
     logger.info("default_admin_created", username="admin")
 
-
-# ─────────────────────────────────────────────────────────────
-# APP
-# ─────────────────────────────────────────────────────────────
-
+#app
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
@@ -108,8 +72,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middlewares ────────────────────────────────────────────────
-
+# middlewares
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
@@ -136,8 +99,7 @@ async def log_requests(request, call_next):
     return response
 
 
-# ── Routes ─────────────────────────────────────────────────────
-
+#routes
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(suppliers.router)

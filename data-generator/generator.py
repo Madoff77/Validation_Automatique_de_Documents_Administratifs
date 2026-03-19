@@ -1,30 +1,3 @@
-"""
-Générateur de documents administratifs synthétiques.
-
-Produit :
-  - Texte brut (pour entraînement classifier)
-  - PDF (pour tests OCR pipeline)
-  - Images dégradées (scans simulés)
-
-Types de documents : FACTURE, DEVIS, SIRET, URSSAF, KBIS, RIB
-Dégradations simulées : flou, rotation, bruit, basse résolution, combiné
-
-Structure :
-  generator.py              → point d'entrée, CLI, _gen_company, generate_text
-  templates/helpers.py      → utilitaires partagés (Faker, dates, montants)
-  templates/facture.py      → template FACTURE (3 variantes)
-  templates/devis.py        → template DEVIS (3 variantes)
-  templates/urssaf.py       → template URSSAF
-  templates/kbis.py         → template KBIS
-  templates/siret.py        → template SIRET
-  templates/rib.py          → template RIB
-
-Usage :
-  python generator.py --mode training --n-per-class 150 --output data/training
-  python generator.py --mode demo --output data/demo
-  python generator.py --mode pdf --doc-type FACTURE --n 5 --output data/pdfs
-"""
-
 import os
 import json
 import random
@@ -40,7 +13,7 @@ import cv2
 import requests
 from dotenv import load_dotenv
 
-# ─── Charger .env depuis plusieurs chemins possibles ─────────────────────────
+# Charger .env depuis plusieurs chemins possibles
 for _env_path in ["../", "/app/", "./"]:
     _candidate = Path(_env_path) / ".env"
     if _candidate.exists():
@@ -59,7 +32,7 @@ if not API_KEY:
         stacklevel=2,
     )
 
-# ─── Faker (sans seed global — voir note ci-dessous) ─────────────────────────
+# Faker (sans seed global — voir note ci-dessous)
 #
 # NOTE IMPORTANTE — pourquoi on ne seed PAS ici :
 #
@@ -77,12 +50,11 @@ if not API_KEY:
 #     réelle ~85-93% sur le set synthétique, plus représentative du réel
 #   - Les templates ont 2-3 variantes de layout → le RF doit apprendre le contenu
 #   - train.py fixe random_state=42 uniquement pour la reproductibilité du split
-#
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 fake = Faker("fr_FR")
 
-# ─── Importer les templates ───────────────────────────────────────────────────
+# Importer les templates
 # Ajouter le dossier courant au path pour que les templates trouvent ce module
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -97,9 +69,7 @@ from templates import (
 from templates.helpers import register_company_factory, fake as _helpers_fake
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # API SIRENE
-# ─────────────────────────────────────────────────────────────────────────────
 
 def fetch_sirene_companies(n_companies: int = 100) -> list:
     """Récupère un lot d'entreprises réelles actives via l'API SIRENE."""

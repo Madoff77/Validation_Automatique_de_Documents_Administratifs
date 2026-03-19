@@ -1,17 +1,3 @@
-"""
-Extracteur de champs métier par regex.
-
-Principes de robustesse OCR :
-- Les patterns regex tolèrent les espaces parasites (ex: "123 456 789 01234" = SIRET)
-- Les montants tolèrent virgule ou point comme séparateur décimal
-- Les dates couvrent 8+ formats courants en France
-- Les patterns sont non-greedy et ancré sur contexte (mots-clés voisins)
-- En cas d'ambiguïté, on retourne le candidat avec le plus fort contexte
-
-Un ExtractedFields est retourné pour chaque document, avec les champs
-pertinents pour son type. Les champs non applicables restent None.
-"""
-
 import re
 from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Tuple, Dict, Any
@@ -21,16 +7,14 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ─────────────────────────────────────────────────────────────
-# PATTERNS REGEX — compilés une fois au démarrage
-# ─────────────────────────────────────────────────────────────
+# les patterns regex compilés une fois au démarrage
 
-# SIRET : 14 chiffres, parfois espacés par groupes (3-3-3-5 ou 9-5)
+# SIRET : 14 chiffres espacés par groupes 3-3-3-5
 _RE_SIRET = re.compile(
     r'\b(\d{3}[\s.\-]?\d{3}[\s.\-]?\d{3}[\s.\-]?\d{5})\b'
 )
 
-# SIREN : 9 chiffres (sous-ensemble du SIRET, à extraire séparément si pas de SIRET)
+# SIREN : 9 chiffres 3 3 3
 _RE_SIREN = re.compile(
     r'\b(\d{3}[\s.\-]?\d{3}[\s.\-]?\d{3})\b'
 )
@@ -41,24 +25,22 @@ _RE_TVA = re.compile(
     re.IGNORECASE
 )
 
-# ── Montants ────────────────────────────────────────────────────
+# Montants
 # Capture un nombre décimal (virgule ou point) suivi optionnellement de €
 _AMOUNT_PATTERN = r'([\d\s]{1,10}[,.]?\d{0,2})\s*(?:€|EUR|euros?)?'
 
-# Contexte HT (Hors Taxes)
-# NOTE : on exclut volontairement les alternatives trop permissives comme "ht\s*:?"
-# ou "prix\s+ht" (correspond aux en-têtes de colonnes "Prix Unitaire HT" dans les tableaux).
-# "\bht\s*:" (avec deux-points obligatoire) couvre les labels "HT : 200,00".
+# Contexte HT
+
 _RE_MONTANT_HT = re.compile(
     r'(?:total\s+ht|montant\s+ht|sous.?total\s+ht|base\s+ht|net\s+ht|\bht\s*:)[^\d]{0,20}' + _AMOUNT_PATTERN,
     re.IGNORECASE
 )
-# Contexte TTC (Toutes Taxes Comprises)
+# Contexte TTC
 _RE_MONTANT_TTC = re.compile(
     r'(?:total\s+ttc|montant\s+ttc|ttc\s*:?|net\s+à\s+payer|à\s+payer\s*:?|total\s+général)[^\d]{0,20}' + _AMOUNT_PATTERN,
     re.IGNORECASE
 )
-# Montant TVA (la ligne "TVA XX%" ou "dont TVA")
+# Montant TVA
 _RE_MONTANT_TVA = re.compile(
     r'(?:tva\s+(?:à\s+)?\d[\d,.]?\s*%|dont\s+tva|montant\s+tva)[^\d]{0,20}' + _AMOUNT_PATTERN,
     re.IGNORECASE
@@ -69,7 +51,7 @@ _RE_TAUX_TVA = re.compile(
     re.IGNORECASE
 )
 
-# ── Dates ────────────────────────────────────────────────────────
+# Dates
 # Formats supportés : DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY,
 #                     YYYY-MM-DD, D MOIS YYYY, "le DD/MM/YYYY"
 _DATE_FORMATS_STR = [
@@ -94,7 +76,7 @@ _RE_DATE_ECHEANCE = re.compile(
     r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4}|\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2})',
     re.IGNORECASE
 )
-# Contexte date expiration / validité (attestations, Kbis)
+# Contexte date expiration / validité
 _RE_DATE_EXPIRATION = re.compile(
     r'(?:valable\s+jusqu[\'au]*\s+(?:au)?|valide?\s+(?:jusqu[\'au]*\s+(?:au)?|jusqu\'au)'
     r'|expire\s+le|date\s+(?:de\s+)?(?:fin|expiration|validité)|jusqu\'au)\s*[:\s]?\s*'
@@ -102,7 +84,7 @@ _RE_DATE_EXPIRATION = re.compile(
     re.IGNORECASE
 )
 
-# ── Numéro de document ────────────────────────────────────────
+# Numéro de document
 _RE_NUM_FACTURE = re.compile(
     r'(?:facture\s*n[o°]?\s*:?|n[o°]\s*(?:de\s+)?facture\s*:?|ref[.\s]*facture\s*:?)\s*([A-Z0-9\-_/]{3,25})',
     re.IGNORECASE
@@ -116,7 +98,7 @@ _RE_NUM_DOCUMENT = re.compile(
     re.IGNORECASE
 )
 
-# ── IBAN / BIC ────────────────────────────────────────────────
+# IBAN / BIC
 _RE_IBAN = re.compile(
     r'\b(FR\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{2,3})\b',
     re.IGNORECASE
@@ -129,24 +111,21 @@ _RE_BANQUE = re.compile(
     re.IGNORECASE
 )
 
-# ── Raison sociale (heuristique sur suffixes juridiques français) ────────────
+#  Raison sociale 
 _RE_RAISON_SOCIALE = re.compile(
     r'\b([A-ZÀÂÉÈÊÙÛÇ][A-Za-zÀ-ÿ\s\-&]{2,50}(?:SAS|SA|SARL|EURL|SNC|SCI|SASU|EI|EIRL|SCP|GIE|GIP|SELARL))\b'
     r'|'
     r'\b((?:SAS|SA|SARL|EURL|SNC|SCI|SASU|EI|EIRL)\s+[A-ZÀÂÉÈÊÙÛÇ][A-Za-zÀ-ÿ\s\-&]{2,50})\b'
 )
 
-# ── Adresse ───────────────────────────────────────────────────
+# Adresse
 _RE_ADRESSE = re.compile(
     r'\b(\d{1,5}[,\s]+(?:rue|avenue|boulevard|allée|impasse|chemin|route|place|'
     r'résidence|cité|domaine|voie)[,\s]+[A-Za-zÀ-ÿ\s\-,]{5,60}[,\s]+\d{5}[,\s]+[A-Za-zÀ-ÿ\s]{2,30})\b',
     re.IGNORECASE
 )
 
-
-# ─────────────────────────────────────────────────────────────
 # UTILITAIRES
-# ─────────────────────────────────────────────────────────────
 
 def _clean_number(raw: str) -> Optional[str]:
     """Normaliser un identifiant numérique : supprimer espaces/tirets/points."""
@@ -160,17 +139,17 @@ def _parse_amount(raw: str) -> Optional[float]:
     if not raw:
         return None
     s = raw.strip()
-    # Supprimer séparateurs de milliers (espace ou point si suivi de 3 chiffres)
+    # supprimer séparateurs de milliers
     s = re.sub(r'[\s\u00a0]', '', s)
-    # Distinguer virgule décimale vs point décimal
+    # distinguer virgule décimale vs point décimal
     if ',' in s and '.' in s:
-        # Format 1.234,56 → 1234.56
+        # exmeple pour se cas : 1.234,56 → 1234.56
         s = s.replace('.', '').replace(',', '.')
     elif ',' in s:
         s = s.replace(',', '.')
     try:
         val = float(s)
-        # Sanity check : montant raisonnable pour une facture (0 à 10M€)
+        #montant raisonnable pour une facture=
         if 0 < val < 10_000_000:
             return round(val, 2)
     except (ValueError, TypeError):
@@ -184,7 +163,7 @@ def _parse_date(raw: str) -> Optional[str]:
         return None
     try:
         d = dateutil_parser.parse(raw, dayfirst=True, fuzzy=False)
-        # Rejeter les dates manifestement absurdes
+        # rejeter les dates absurdes
         if d.year < 1990 or d.year > 2050:
             return None
         return d.strftime("%Y-%m-%d")
@@ -203,9 +182,7 @@ def _all_matches(pattern: re.Pattern, text: str, group: int = 1) -> List[str]:
     return [m.group(group).strip() for m in pattern.finditer(text) if m.group(group)]
 
 
-# ─────────────────────────────────────────────────────────────
-# EXTRACTION PAR CHAMP
-# ─────────────────────────────────────────────────────────────
+# extraction par champ
 
 def _extract_siret(text: str) -> Optional[str]:
     """
@@ -223,7 +200,7 @@ def _extract_siret(text: str) -> Optional[str]:
         if candidate and len(candidate) == 14:
             return candidate
 
-    # Fallback : toute séquence de 14 chiffres (avec espaces tolérés)
+    # Fallback : toute séquence de 14 chiffres
     for m in _RE_SIRET.finditer(text):
         candidate = _clean_number(m.group(1))
         if candidate and len(candidate) == 14:
@@ -233,7 +210,7 @@ def _extract_siret(text: str) -> Optional[str]:
 
 
 def _extract_siren(text: str, siret: Optional[str] = None) -> Optional[str]:
-    """Extraire SIREN. Si SIRET disponible, en dériver directement."""
+    # extraire SIREN si le SIRET est disponible
     if siret and len(siret) == 14:
         return siret[:9]
 
@@ -249,7 +226,7 @@ def _extract_siren(text: str, siret: Optional[str] = None) -> Optional[str]:
 
 
 def _extract_tva_number(text: str) -> Optional[str]:
-    """Extraire le numéro TVA intracommunautaire."""
+    # extraire le numéro TVA
     m = _RE_TVA.search(text)
     if m:
         return _clean_number(m.group(1)).upper()
@@ -257,11 +234,7 @@ def _extract_tva_number(text: str) -> Optional[str]:
 
 
 def _tva_rate_plausible(ht: float, tva: float) -> bool:
-    """
-    Vérifie que le taux TVA implicite (tva/ht) est proche d'un taux légal français.
-    Évite de valider des déductions croisées quand HT a été mal extrait.
-    Taux légaux : 20%, 10%, 8.5%, 5.5%, 2.1%
-    """
+    # vérifie que le taux TVA implicite (tva/ht)
     if ht <= 0 or tva <= 0:
         return False
     rate = (tva / ht) * 100
@@ -272,17 +245,12 @@ def _tva_rate_plausible(ht: float, tva: float) -> bool:
 
 
 def _extract_montants(text: str) -> Tuple[Optional[float], Optional[float], Optional[float]]:
-    """
-    Extraire HT, TVA (montant), TTC.
-    Si certains sont manquants, tenter de les déduire des autres.
-    La déduction n'est appliquée que si le taux TVA résultant est cohérent
-    avec les taux légaux français (évite de propager un HT mal extrait).
-    """
+    #Extraire HT, TVA (montant), TTC et si certains sont manquants tenter de les déduire des autres
     ht = _parse_amount(_first_match(_RE_MONTANT_HT, text))
     tva_amount = _parse_amount(_first_match(_RE_MONTANT_TVA, text))
     ttc = _parse_amount(_first_match(_RE_MONTANT_TTC, text))
 
-    # Déductions croisées — avec vérification de cohérence TVA
+    # déductions croisées
     if ht and tva_amount and not ttc:
         ttc = round(ht + tva_amount, 2)
     elif ht and ttc and not tva_amount:
@@ -298,15 +266,15 @@ def _extract_montants(text: str) -> Tuple[Optional[float], Optional[float], Opti
 
 
 def _extract_taux_tva(text: str, ht: Optional[float] = None, tva: Optional[float] = None) -> Optional[float]:
-    """Extraire le taux TVA. Fallback : calculer depuis HT et montant TVA."""
+    # extraire le taux TVA
     m = _RE_TAUX_TVA.search(text)
     if m:
         try:
             taux = float(m.group(1).replace(',', '.'))
-            # Valeurs légales françaises
+            # valeurs légales françaises
             if taux in (20.0, 10.0, 8.5, 5.5, 2.1):
                 return taux
-            # Tolérance ±0.5%
+            # tolérance plus ou moins 0.5%
             for legal in (20.0, 10.0, 8.5, 5.5, 2.1):
                 if abs(taux - legal) <= 0.5:
                     return legal
@@ -314,7 +282,7 @@ def _extract_taux_tva(text: str, ht: Optional[float] = None, tva: Optional[float
         except ValueError:
             pass
 
-    # Fallback calculé
+    # fallback calculé 
     if ht and tva and ht > 0:
         taux = round((tva / ht) * 100, 1)
         for legal in (20.0, 10.0, 8.5, 5.5, 2.1):
@@ -325,12 +293,12 @@ def _extract_taux_tva(text: str, ht: Optional[float] = None, tva: Optional[float
 
 
 def _extract_dates(text: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Extraire date émission, échéance, expiration."""
+    # extraire date émission, échéance et expiration
     emission = _parse_date(_first_match(_RE_DATE_EMISSION, text))
     echeance = _parse_date(_first_match(_RE_DATE_ECHEANCE, text))
     expiration = _parse_date(_first_match(_RE_DATE_EXPIRATION, text))
 
-    # Si pas de date d'émission, prendre la première date plausible dans le doc
+    # si pas de date d'émission, prendre la première date plausible dans le doc
     if not emission:
         for r in _RE_DATES:
             m = r.search(text)
@@ -345,7 +313,7 @@ def _extract_dates(text: str) -> Tuple[Optional[str], Optional[str], Optional[st
 
 
 def _extract_numero_document(text: str, doc_type: str) -> Optional[str]:
-    """Extraire le numéro de document selon son type."""
+    # extraire le numéro de document selon le type
     if doc_type == "FACTURE":
         num = _first_match(_RE_NUM_FACTURE, text)
         if num:
@@ -354,7 +322,7 @@ def _extract_numero_document(text: str, doc_type: str) -> Optional[str]:
         num = _first_match(_RE_NUM_DEVIS, text)
         if num:
             return num
-    # Fallback générique
+    # fallback 
     return _first_match(_RE_NUM_DOCUMENT, text)
 
 
@@ -366,11 +334,10 @@ def _extract_iban(text: str) -> Optional[str]:
 
 
 def _extract_bic(text: str) -> Optional[str]:
-    # Chercher d'abord dans contexte explicite
+    # chercher dans contexte explicite
     ctx = re.search(r'(?:bic|swift)\s*[:\s]?\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2,5})', text, re.IGNORECASE)
     if ctx:
         return ctx.group(1).upper()
-    # Fallback : pattern BIC seul (risqué hors contexte → non utilisé en fallback)
     return None
 
 
@@ -382,18 +349,14 @@ def _extract_banque(text: str) -> Optional[str]:
 
 
 def _extract_raison_sociale_heuristic(text: str) -> Optional[str]:
-    """
-    Heuristique basée sur les suffixes juridiques français.
-    Retourne la raison sociale la plus proche du début du document.
-    """
-    m = _RE_RAISON_SOCIALE.search(text[:2000])  # Chercher uniquement en haut du doc
+    # retourne la raison sociale la plus proche du début du document
+    m = _RE_RAISON_SOCIALE.search(text[:2000])
     if m:
         return (m.group(1) or m.group(2) or "").strip()
     return None
 
 
 def _extract_raison_sociale(text: str) -> Optional[str]:
-    """Extraction par heuristique regex sur suffixes juridiques français."""
     return _extract_raison_sociale_heuristic(text)
 
 
@@ -404,9 +367,7 @@ def _extract_adresse(text: str) -> Optional[str]:
     return None
 
 
-# ─────────────────────────────────────────────────────────────
-# EXTRACTION PAR TYPE DE DOCUMENT
-# ─────────────────────────────────────────────────────────────
+# extraction de la facture
 
 def _extract_facture(text: str) -> dict:
     siret = _extract_siret(text)
@@ -437,7 +398,7 @@ def _extract_devis(text: str) -> dict:
     ht, tva_amount, ttc = _extract_montants(text)
     taux = _extract_taux_tva(text, ht, tva_amount)
     emission, echeance, expiration = _extract_dates(text)
-    # Pour un devis, l'échéance = date limite d'acceptation
+    # si pas d expiration on prend l'échéance
     if not expiration:
         expiration = echeance
     return {
@@ -478,7 +439,7 @@ def _extract_urssaf(text: str) -> dict:
     siren = _extract_siren(text, siret)
     emission, _, expiration = _extract_dates(text)
     if not expiration:
-        # Pour URSSAF, chercher "valable jusqu'au" ou "valide jusqu'au"
+        # pour l'URSSAF on cherche valable ou valable jusqu'au
         m = re.search(
             r'valable?\s+jusqu[\'au]*\s+(?:au)?\s*(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
             text, re.IGNORECASE
@@ -499,8 +460,7 @@ def _extract_kbis(text: str) -> dict:
     siret = _extract_siret(text)
     siren = _extract_siren(text, siret)
     emission, _, expiration = _extract_dates(text)
-    # Pour Kbis, la date d'émission fait foi pour la validité (3 mois légaux)
-    # Si pas de date d'expiration explicite, calculer à partir de l'émission
+    # si pas de date d'expiration explicite calculer à partir de l'émission
     if emission and not expiration:
         try:
             from datetime import timedelta
@@ -535,10 +495,7 @@ def _extract_rib(text: str) -> dict:
         "adresse": _extract_adresse(text),
     }
 
-
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 _EXTRACTORS = {
     "FACTURE": _extract_facture,
@@ -547,17 +504,11 @@ _EXTRACTORS = {
     "URSSAF": _extract_urssaf,
     "KBIS": _extract_kbis,
     "RIB": _extract_rib,
-    "UNKNOWN": _extract_facture,  # Tentative générique
+    "UNKNOWN": _extract_facture,
 }
 
 
 def extract_fields(ocr_text: str, doc_type: str) -> dict:
-    """
-    Extraire les champs métier d'un texte OCR selon le type de document.
-
-    Retourne un dict compatible avec le schéma ExtractedFields MongoDB.
-    Les clés absentes restent None — le schéma MongoDB accepte le schéma flexible.
-    """
     if not ocr_text or not ocr_text.strip():
         logger.warning("extract_fields_empty_text", doc_type=doc_type)
         return {}
@@ -566,7 +517,7 @@ def extract_fields(ocr_text: str, doc_type: str) -> dict:
 
     try:
         result = extractor(ocr_text)
-        # Nettoyer les valeurs None pour alléger MongoDB
+        # nettoyer les valeurs None pour alléger MongoDB
         result = {k: v for k, v in result.items() if v is not None}
 
         fields_found = len(result)

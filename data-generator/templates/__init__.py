@@ -1,14 +1,3 @@
-"""
-Package templates — fonctions de génération de texte par type de document.
-
-Chaque module expose une fonction _text_<type>() qui génère un document
-administratif synthétique avec variations de mise en page.
-
-Usage depuis generator.py :
-    from templates import _text_facture, _text_devis, ...
-    from templates.helpers import register_company_factory
-"""
-
 from .facture import _text_facture
 from .devis import _text_devis
 from .urssaf import _text_urssaf

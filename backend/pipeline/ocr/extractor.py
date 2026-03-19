@@ -1,15 +1,3 @@
-"""
-Extracteur OCR hybride.
-
-Stratégie en deux temps :
-1. Si le fichier est un PDF avec texte natif extractible → pdfplumber (pas d'OCR)
-   → Meilleure précision, latence ~200ms, pas de dégradation OCR
-2. Sinon (PDF scanné, image JPEG/PNG/TIFF) → preprocessing OpenCV + Tesseract
-   → Plusieurs passes avec configs différentes, on garde la meilleure
-
-Retourne un OCRResult avec le texte, un score de confiance, et des métadonnées.
-"""
-
 import io
 import re
 import tempfile
@@ -28,39 +16,33 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ─────────────────────────────────────────────────────────────
-# CONFIG TESSERACT
-# ─────────────────────────────────────────────────────────────
 
-# Configurations Tesseract à essayer (PSM = Page Segmentation Mode)
+# Configurations Tesseract
 TESSERACT_CONFIGS = [
-    # PSM 3 : auto — détection colonne + orientation  (défaut, bon pour tout)
+    # PSM 3 : auto — détection colonne + orientation
     r"--oem 3 --psm 3 -l fra+eng",
-    # PSM 6 : bloc de texte uniforme  (bon pour formulaires/factures)
+    # PSM 6 : bloc de texte uniforme
     r"--oem 3 --psm 6 -l fra+eng",
 ]
 
-# Seuil de confiance au-dessus duquel on arrête d'essayer d'autres configs
+# seuil de confiance au dessus duquel on arrete d'essayer d'autres configs
 EARLY_STOP_CONFIDENCE = 0.65
 
-# Seuil minimum de confiance Tesseract (0-100) pour conserver un mot
+# seuil minimum de confiance Tesseract (0-100) pour conserver un mot
 MIN_WORD_CONFIDENCE = 20
 
-# Un PDF est considéré "natif" si on extrait plus de N caractères non-espaces
+# pdf natif si on extrait plus que N caracteres non vides
 NATIVE_PDF_MIN_CHARS = 50
 
-
-# ─────────────────────────────────────────────────────────────
 # DATA CLASSES
-# ─────────────────────────────────────────────────────────────
 
 @dataclass
 class OCRResult:
-    text: str                          # Texte extrait complet
-    confidence: float                  # Score moyen confiance (0-1)
-    method: str                        # "native_pdf" | "tesseract" | "tesseract_multi"
-    ocr_config: Optional[str]          # Config Tesseract utilisée
-    page_count: int                    # Nombre de pages traitées
+    text: str                      
+    confidence: float               
+    method: str                       
+    ocr_config: Optional[str]          
+    page_count: int                    
     word_count: int
     preprocessing_strategy: Optional[str] = None
     raw_ocr_data: Optional[dict] = None
@@ -71,15 +53,9 @@ class OCRResult:
         return len(self.text.strip()) > 20 and self.confidence > 0.2
 
 
-# ─────────────────────────────────────────────────────────────
 # EXTRACTION TEXTE NATIF PDF
-# ─────────────────────────────────────────────────────────────
 
 def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
-    """
-    Extraire le texte d'un PDF natif (non-scanné) via pdfplumber.
-    Retourne None si le PDF est un scan ou si l'extraction échoue.
-    """
     try:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
@@ -89,7 +65,6 @@ def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
                 if text:
                     pages_text.append(text.strip())
             full_text = "\n\n".join(pages_text)
-            # Valider qu'on a vraiment du texte
             non_space = re.sub(r'\s+', '', full_text)
             if len(non_space) >= NATIVE_PDF_MIN_CHARS:
                 return full_text
@@ -98,9 +73,8 @@ def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
     return None
 
 
-# ─────────────────────────────────────────────────────────────
-# CONVERSION PDF → IMAGES
-# ─────────────────────────────────────────────────────────────
+
+# convertion de pdf en images
 
 def _pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> List[np.ndarray]:
     """
@@ -122,28 +96,16 @@ def _pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> List[np.ndarray]:
         return []
 
 
-# ─────────────────────────────────────────────────────────────
-# OCR TESSERACT — UNE IMAGE
-# ─────────────────────────────────────────────────────────────
+# OCR tesseract — UNE IMAGE
 
 def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
-    """
-    Lancer Tesseract sur une image PIL avec une configuration donnée.
-    Retourne (texte, confiance_moyenne).
-
-    Les mots sont regroupés par ligne (block_num, par_num, line_num) pour
-    préserver la structure ligne/colonne du document. Sans ça, les en-têtes
-    de colonnes ("Prix HT", "Montant HT") se retrouvent dans le même flux
-    que les lignes totaux, ce qui fait matcher les regex montants sur les
-    mauvaises valeurs.
-    """
     try:
         data = pytesseract.image_to_data(
             pil_img,
             config=config,
             output_type=pytesseract.Output.DICT,
         )
-        # Grouper les mots par ligne physique (block > paragraph > line)
+        # grouper les mots par ligne physique
         lines: dict = {}
         confidences = []
         for i, conf in enumerate(data["conf"]):
@@ -154,7 +116,7 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
                     lines.setdefault(key, []).append(word)
                     confidences.append(float(conf))
 
-        # Reconstruire le texte avec sauts de ligne entre chaque ligne physique
+        # reconstruire le texte avec sauts de ligne entre chaque ligne physique
         text = "\n".join(" ".join(words) for words in lines.values())
         avg_conf = float(np.mean(confidences)) / 100.0 if confidences else 0.0
 
@@ -165,11 +127,6 @@ def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
 
 
 def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
-    """
-    Essayer les configurations Tesseract sur une image préprocessée,
-    retourner (texte, confiance, config_utilisée) du meilleur résultat.
-    Early stop si la confiance dépasse EARLY_STOP_CONFIDENCE.
-    """
     pil_img = Image.fromarray(np_img)
     best_text = ""
     best_conf = 0.0
@@ -182,24 +139,16 @@ def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
             best_text = text
             best_conf = conf
             best_config = config
-        # Arrêter dès qu'on a une bonne confiance — inutile de tester les autres configs
+        # arrêter dès qu'on a une bonne confiance
         if best_conf >= EARLY_STOP_CONFIDENCE:
             break
 
     return best_text, best_conf, best_config
 
 
-# ─────────────────────────────────────────────────────────────
 # NETTOYAGE TEXTE OCR
-# ─────────────────────────────────────────────────────────────
 
 def _clean_ocr_text(text: str) -> str:
-    """
-    Post-traitement du texte OCR :
-    - Supprimer lignes vides multiples
-    - Corriger artefacts courants Tesseract
-    - Normaliser les espaces
-    """
     if not text:
         return ""
 
@@ -207,8 +156,8 @@ def _clean_ocr_text(text: str) -> str:
     corrections = {
         r'\bI€\b': 'Le',
         r'\bI"s\b': 'Les',
-        r'0(?=[A-Z])': 'O',   # 0 -> O devant majuscule (ex: 0RACLE -> ORACLE)
-        r'(?<=[A-Z])0': 'O',  # 0 -> O après majuscule
+        r'0(?=[A-Z])': 'O',   # 0 -> O
+        r'(?<=[A-Z])0': 'O',
         r'\|': 'I',            # pipe -> I
         r'§IRET': 'SIRET',
         r'§IREN': 'SIREN',
@@ -217,11 +166,11 @@ def _clean_ocr_text(text: str) -> str:
     for pattern, replacement in corrections.items():
         text = re.sub(pattern, replacement, text)
 
-    # Normaliser sauts de ligne multiples
+    # normaliser sauts de ligne multiples
     text = re.sub(r'\n{3,}', '\n\n', text)
-    # Normaliser espaces multiples
+    # normaliser espaces multiples
     text = re.sub(r'[ \t]+', ' ', text)
-    # Supprimer lignes ne contenant que des caractères spéciaux
+    # supprimer lignes ne contenant que des caractère spéciaux
     lines = [
         line for line in text.split('\n')
         if re.search(r'[a-zA-Z0-9€]', line)
@@ -230,18 +179,9 @@ def _clean_ocr_text(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 def extract_text(file_bytes: bytes, mime_type: str) -> OCRResult:
-    """
-    Point d'entrée principal.
-
-    Logique de routage :
-    - PDF → essayer extraction native, sinon convertir en images + OCR
-    - Image (JPEG, PNG, TIFF, BMP) → preprocessing + OCR directement
-    """
     mime_type = mime_type.lower().strip()
 
     if mime_type == "application/pdf":
@@ -266,8 +206,7 @@ def extract_text(file_bytes: bytes, mime_type: str) -> OCRResult:
 
 
 def _extract_from_pdf(pdf_bytes: bytes) -> OCRResult:
-    """Pipeline complet pour PDF."""
-    # 1. Tentative extraction native
+    # tentative extraction native
     native_text = _extract_native_pdf(pdf_bytes)
     if native_text:
         cleaned = _clean_ocr_text(native_text)
@@ -275,18 +214,18 @@ def _extract_from_pdf(pdf_bytes: bytes) -> OCRResult:
         logger.info("pdf_native_extraction_success", words=word_count)
         return OCRResult(
             text=cleaned,
-            confidence=0.98,  # Texte natif = quasi-parfait
+            confidence=0.98,
             method="native_pdf",
             ocr_config=None,
             page_count=native_text.count('\n\n') + 1,
             word_count=word_count,
         )
 
-    # 2. PDF scanné → convertir en images + OCR
+    # PDF scanné doonc : convertir en images + OCR
     logger.info("pdf_is_scanned_fallback_to_ocr")
     images = _pdf_to_images(pdf_bytes, dpi=300)
     if not images:
-        # Retry à 150 DPI si Poppler échoue à 300
+        # retry a 150 si poppler échoue a 300
         images = _pdf_to_images(pdf_bytes, dpi=150)
 
     if not images:
@@ -303,7 +242,6 @@ def _extract_from_pdf(pdf_bytes: bytes) -> OCRResult:
 
 
 def _extract_from_image(image_bytes: bytes) -> OCRResult:
-    """Pipeline pour une image unique."""
     images_bgr = []
     # Tenter chargement OpenCV
     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -325,14 +263,14 @@ def _extract_from_image(image_bytes: bytes) -> OCRResult:
 
 
 def _ocr_multiple_images(images: List[np.ndarray], page_count: int) -> OCRResult:
-    """OCR sur une liste d'images (pages d'un PDF ou image unique)."""
+    # OCR sur une liste d'images
     all_texts = []
     all_confidences = []
     best_config = TESSERACT_CONFIGS[0]
     preprocessing_strategy = None
 
     for page_idx, img_bgr in enumerate(images):
-        # Preprocessing adaptatif
+        # preprocessing adaptatif
         try:
             prep_result = preprocess_image(img_bgr)
             preprocessed = prep_result.image
@@ -341,10 +279,10 @@ def _ocr_multiple_images(images: List[np.ndarray], page_count: int) -> OCRResult
             logger.warning("preprocessing_failed_page", page=page_idx, error=str(e))
             preprocessed = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-        # Multi-pass Tesseract
+        # multi-pass Tesseract
         text, conf, config = _best_tesseract_pass(preprocessed)
 
-        # Si confiance trop faible, retenter sans preprocessing (parfois contre-productif)
+        # si confiance trop faible retenter sans preprocessing
         if conf < 0.4:
             gray_raw = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
             text_raw, conf_raw, config_raw = _best_tesseract_pass(gray_raw)

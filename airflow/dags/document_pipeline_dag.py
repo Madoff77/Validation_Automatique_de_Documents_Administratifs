@@ -1,22 +1,3 @@
-"""
-DAG Airflow : document_pipeline
-
-Orchestration du pipeline de traitement documentaire.
-Déclenché via REST API avec conf = {"document_id": "uuid"}.
-
-Graphe des tâches :
-    preprocess_ocr → classify → extract_fields → validate → finalize
-
-Chaque tâche :
-- lit l'état depuis MongoDB (résistance aux redémarrages)
-- passe les résultats via XCom (léger, texte OCR max ~100KB)
-- met à jour le statut MongoDB en temps réel
-- loggue en JSON structuré
-
-Retry : 2 tentatives avec délai exponentiel.
-Timeout : 10 min par tâche (suffisant même pour gros PDF scanné).
-"""
-
 from __future__ import annotations
 
 import sys
@@ -27,22 +8,21 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
-# Ajouter le dossier parent au PYTHONPATH pour accéder aux modules pipeline
-# (volumes montés dans docker-compose : ./backend/pipeline → /opt/airflow/pipeline)
+# ajouter le dossier parent au PYTHONPATH pour accéder aux modules pipeline
+
 for path in ["/opt/airflow", "/app"]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
-# Configurer structlog pour que les logs apparaissent dans les task logs Airflow
+# configurer structlog pour que les logs apparaissent dans les task logs Airflow + exception si jamais 
+
 try:
     from utils.logger import configure_logging
     configure_logging()
 except Exception as _log_err:
     print(f"[DAG] structlog config skipped: {_log_err}")
 
-# ─────────────────────────────────────────────────────────────
-# DEFAULTS
-# ─────────────────────────────────────────────────────────────
+# arguments par defaults
 
 DEFAULT_ARGS = {
     "owner": "docplatform",
@@ -57,19 +37,12 @@ DEFAULT_ARGS = {
 }
 
 
-# ─────────────────────────────────────────────────────────────
-# FONCTIONS WRAPPER (appelées par PythonOperator)
-# ─────────────────────────────────────────────────────────────
+# focntions wrapper (appelées par PythonOperator)
 
 def _get_document_id(context: dict) -> str:
-    """
-    Extraire document_id depuis dag_run.conf.
 
-    Fallback dev : si aucun document_id fourni, récupère automatiquement
-    le document le plus récent en statut 'pending' (ou tout statut) depuis MongoDB.
-    Ce fallback est uniquement destiné aux tests locaux — en production, le
-    document_id est toujours injecté par le backend via l'API Airflow.
-    """
+    # extraire document_id depuis dag_run.conf.
+
     conf = context["dag_run"].conf or {}
     document_id = conf.get("document_id")
 
@@ -77,24 +50,23 @@ def _get_document_id(context: dict) -> str:
         print(f"[DAG] document_id fourni via conf : {document_id}")
         return document_id
 
-    # ── Fallback développement ────────────────────────────────
     print("[DAG] Aucun document_id dans conf — fallback dev : recherche dans MongoDB")
     try:
         import pymongo
 
-        # Lire directement les env vars (évite d'importer api.config et ses dépendances FastAPI)
+        # lire directement les variables d''env
         mongo_uri = os.environ.get("MONGO_URI", "mongodb://mongo:27017")
         mongo_db = os.environ.get("MONGO_DB", "docplatform")
 
         client = pymongo.MongoClient(mongo_uri)
         db = client[mongo_db]
 
-        # Priorité : document pending (non encore traité)
+        # on donne la priorité aux document pending
         doc = db.documents.find_one(
             {"status": "pending"},
             sort=[("upload_timestamp", pymongo.DESCENDING)],
         )
-        # Sinon : n'importe quel document (pour re-tester)
+        # sinon n'importe quel document pour test
         if not doc:
             doc = db.documents.find_one(
                 {},
@@ -189,14 +161,11 @@ def fn_finalize(**context):
     return result
 
 
-# ─────────────────────────────────────────────────────────────
-# CALLBACKS
-# ─────────────────────────────────────────────────────────────
+# marquer le document en erreur dans mongo si le DAG ne réussie pas
 
 def on_failure_callback(context):
-    """Marquer le document en erreur dans MongoDB si le DAG échoue."""
     try:
-        # Priorité : conf explicite, sinon XCom (cas fallback dev)
+        # priorité conf explicite sinon XCom
         conf = context["dag_run"].conf or {}
         document_id = conf.get("document_id")
         if not document_id:
@@ -222,33 +191,27 @@ def on_failure_callback(context):
         print(f"on_failure_callback error: {e}")
 
 
-# ─────────────────────────────────────────────────────────────
-# DAG DEFINITION
-# ─────────────────────────────────────────────────────────────
+#definition de DAG
 
 with DAG(
     dag_id="document_pipeline",
     default_args=DEFAULT_ARGS,
     description="Pipeline de traitement documentaire : OCR → Classification → Extraction → Validation → Curated",
-    schedule_interval=None,           # Déclenché uniquement via API (trigger)
+    schedule_interval=None,          
     start_date=days_ago(1),
     catchup=False,
-    max_active_runs=20,               # Jusqu'à 20 documents en parallèle
+    max_active_runs=20,               # 20 documents max traitée en meme temps
     concurrency=10,
     tags=["docplatform", "ocr", "ml"],
     on_failure_callback=on_failure_callback,
     doc_md="""
 ## Pipeline de Traitement Documentaire
 
-Ce DAG traite un document administratif de bout en bout :
+ce DAG traite un document administratif de bout en bout :
 
-1. **preprocess_ocr** : Preprocessing OpenCV adaptatif (7 stratégies) + OCR Tesseract multi-pass
-2. **classify** : Classification TF-IDF + Random Forest (6 types : FACTURE, DEVIS, SIRET, URSSAF, KBIS, RIB)
-3. **extract_fields** : Extraction regex (SIRET, TVA, montants, dates, IBAN, raison sociale...)
-4. **validate** : Validation inter-documents, détection anomalies (expiration, incohérences SIRET, TVA)
-5. **finalize** : Stockage JSON structuré en zone curated MinIO
+preprocess_ocr - classify - extract_fields - validate - finalize
 
-**Déclenchement** : `POST /api/v1/dags/document_pipeline/dagRuns` avec `conf = {"document_id": "uuid"}`
+
     """,
 ) as dag:
 
@@ -282,5 +245,5 @@ Ce DAG traite un document administratif de bout en bout :
         doc_md="Stockage JSON structuré zone curated + update statut final",
     )
 
-    # Chaîne linéaire
+    # chaine linéaire
     preprocess_ocr >> classify >> extract_fields >> validate >> finalize

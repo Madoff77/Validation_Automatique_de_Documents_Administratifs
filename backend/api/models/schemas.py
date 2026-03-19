@@ -4,9 +4,7 @@ from datetime import datetime
 from enum import Enum
 
 
-# ─────────────────────────────────────────────────────────────
-# ENUMS
-# ─────────────────────────────────────────────────────────────
+# Enum
 
 class UserRole(str, Enum):
     ADMIN = "admin"
@@ -66,9 +64,7 @@ class ComplianceStatus(str, Enum):
     PENDING = "pending"
 
 
-# ─────────────────────────────────────────────────────────────
 # AUTH SCHEMAS
-# ─────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -111,9 +107,7 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
-# ─────────────────────────────────────────────────────────────
 # SUPPLIER SCHEMAS
-# ─────────────────────────────────────────────────────────────
 
 class SupplierCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -153,9 +147,7 @@ class SupplierResponse(BaseModel):
     compliance_status: ComplianceStatus
 
 
-# ─────────────────────────────────────────────────────────────
 # DOCUMENT SCHEMAS
-# ─────────────────────────────────────────────────────────────
 
 class ExtractedFields(BaseModel):
     siret: Optional[str] = None
@@ -220,9 +212,7 @@ class DocumentListItem(BaseModel):
     validation_status: Optional[str]
 
 
-# ─────────────────────────────────────────────────────────────
 # ANOMALY SCHEMAS
-# ─────────────────────────────────────────────────────────────
 
 class AnomalyResponse(BaseModel):
     anomaly_id: str
@@ -243,9 +233,7 @@ class AnomalyResolve(BaseModel):
     resolved: bool
 
 
-# ─────────────────────────────────────────────────────────────
 # PIPELINE SCHEMAS
-# ─────────────────────────────────────────────────────────────
 
 class PipelineStatus(BaseModel):
     document_id: str
@@ -260,9 +248,7 @@ class PipelineTriggerResponse(BaseModel):
     message: str
 
 
-# ─────────────────────────────────────────────────────────────
 # DASHBOARD / STATS SCHEMAS
-# ─────────────────────────────────────────────────────────────
 
 class DashboardStats(BaseModel):
     total_documents: int

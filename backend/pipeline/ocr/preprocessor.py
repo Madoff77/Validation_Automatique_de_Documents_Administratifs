@@ -1,12 +1,3 @@
-"""
-Preprocesseur d'images pour OCR robuste.
-
-Stratégie : évaluer la qualité de l'image (flou, contraste, luminosité,
-rotation), puis appliquer la chaîne de traitement la plus adaptée parmi
-plusieurs stratégies. On conserve le résultat qui donne la meilleure
-lisibilité estimée (score Laplacian + densité de texte Tesseract).
-"""
-
 import cv2
 import numpy as np
 from dataclasses import dataclass, field
@@ -16,17 +7,15 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────
 # DATA CLASSES
-# ─────────────────────────────────────────────────────────────
 
 @dataclass
 class ImageQuality:
-    blur_score: float        # variance Laplacian — plus haut = plus net
+    blur_score: float        # variance
     contrast_score: float    # écart-type des pixels
     brightness: float        # luminosité moyenne (0-255)
     noise_score: float       # estimation bruit haute fréquence
-    skew_angle: float        # angle de rotation estimé (degrés)
+    skew_angle: float        # angle de rotation estimé
     width: int
     height: int
 
@@ -65,36 +54,33 @@ class ImageQuality:
 
 @dataclass
 class PreprocessResult:
-    image: np.ndarray                    # image préprocessée finale (BGR ou gray)
+    image: np.ndarray                    # image préprocessée finale
     strategy_used: str
     quality_before: ImageQuality
     quality_after: ImageQuality
     all_candidates: List[Tuple[str, np.ndarray, float]] = field(default_factory=list)
 
 
-# ─────────────────────────────────────────────────────────────
 # QUALITY ASSESSMENT
-# ─────────────────────────────────────────────────────────────
 
 def assess_quality(img: np.ndarray) -> ImageQuality:
-    """Évaluer la qualité d'une image (BGR ou grayscale)."""
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img.copy()
 
-    # Flou : variance du Laplacian (mesure la netteté des contours)
+    # variance du Laplacian
     blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
-    # Contraste : écart-type des niveaux de gris
+    # écart-type des niveaux de gris
     contrast_score = float(gray.std())
 
-    # Luminosité : moyenne
+    # moyenne
     brightness = float(gray.mean())
 
-    # Bruit : différence entre image originale et version lissée
+    # différence entre image originale et version lissée
     blurred_ref = cv2.GaussianBlur(gray, (5, 5), 0)
     noise_map = cv2.absdiff(gray, blurred_ref)
     noise_score = float(noise_map.mean())
 
-    # Angle de biais
     skew_angle = _estimate_skew(gray)
 
     return ImageQuality(
@@ -109,19 +95,16 @@ def assess_quality(img: np.ndarray) -> ImageQuality:
 
 
 def _estimate_skew(gray: np.ndarray) -> float:
-    """
-    Estimer l'angle de rotation dominant via transformée de Hough.
-    Retourne l'angle en degrés (positif = sens antihoraire).
-    """
+    # estimer l'angle de rotation dominant via transformée de Hough
     try:
-        # Binarisation rapide pour détection de lignes
+        # binarisation rapide pour détection de lignes
         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        # Dilater horizontalement pour connecter les mots en lignes
+        # dilater horizontalement pour connecter les mots en lignes
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
         dilated = cv2.dilate(binary, kernel, iterations=1)
 
-        # Trouver les contours des lignes de texte
+        # trouver les contours des lignes de texte
         contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         angles = []
@@ -139,15 +122,11 @@ def _estimate_skew(gray: np.ndarray) -> float:
         if not angles:
             return 0.0
 
-        # Médiane pour robustesse aux outliers
         return float(np.median(angles))
     except Exception:
         return 0.0
 
-
-# ─────────────────────────────────────────────────────────────
 # TRANSFORMATIONS ÉLÉMENTAIRES
-# ─────────────────────────────────────────────────────────────
 
 def to_gray(img: np.ndarray) -> np.ndarray:
     if len(img.shape) == 3:
@@ -156,7 +135,7 @@ def to_gray(img: np.ndarray) -> np.ndarray:
 
 
 def deskew(img: np.ndarray, angle: float) -> np.ndarray:
-    """Corriger la rotation. Angle en degrés."""
+    #pour corriger la rotation
     if abs(angle) < 0.3:
         return img
     h, w = img.shape[:2]
@@ -172,7 +151,7 @@ def deskew(img: np.ndarray, angle: float) -> np.ndarray:
 
 
 def upscale_if_needed(img: np.ndarray, target_min_dim: int = 1200) -> np.ndarray:
-    """Upscaler si la résolution est trop faible pour Tesseract."""
+    # upscaler si la resolution est mauvaise
     h, w = img.shape[:2]
     min_dim = min(h, w)
     if min_dim >= target_min_dim:
@@ -184,36 +163,36 @@ def upscale_if_needed(img: np.ndarray, target_min_dim: int = 1200) -> np.ndarray
 
 
 def unsharp_mask(img: np.ndarray, sigma: float = 1.0, strength: float = 1.5) -> np.ndarray:
-    """Accentuation des contours pour documents flous."""
+    # accentuation des contours pour les documents flous
     blurred = cv2.GaussianBlur(img, (0, 0), sigma)
     return cv2.addWeighted(img, 1 + strength, blurred, -strength, 0)
 
 
 def apply_clahe(gray: np.ndarray, clip_limit: float = 3.0, tile_size: int = 8) -> np.ndarray:
-    """CLAHE : amélioration contraste local adaptatif. Idéal pour scans inégaux."""
+    # CLAHE pour une amélioration de contraste local adaptatif
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile_size, tile_size))
     return clahe.apply(gray)
 
 
 def gamma_correction(gray: np.ndarray, gamma: float) -> np.ndarray:
-    """Correction gamma : gamma < 1 éclaircit, gamma > 1 assombrit."""
+    # correction gamma : gamma < 1 éclaircit, gamma > 1 assombrit
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)], dtype=np.uint8)
     return cv2.LUT(gray, table)
 
 
 def denoise(gray: np.ndarray, strength: int = 10) -> np.ndarray:
-    """Débruitage Non-Local Means — lent mais très efficace sur forte granularité."""
+    # débruitage qui est lent mais très efficace sur forte granularité
     return cv2.fastNlMeansDenoising(gray, h=strength, templateWindowSize=7, searchWindowSize=21)
 
 
 def denoise_bilateral(gray: np.ndarray) -> np.ndarray:
-    """Filtre bilatéral : lisse sans perdre les contours (bon pour scan moyen)."""
+    # Filtre bilatéral : lisse sans perdre les contours
     return cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
 
 
 def threshold_otsu(gray: np.ndarray) -> np.ndarray:
-    """Binarisation Otsu globale — efficace si contraste uniforme."""
+    # Binarisation Otsu globale — efficace si contraste uniforme
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return binary
 
@@ -229,10 +208,7 @@ def threshold_adaptive(gray: np.ndarray, block_size: int = 31, C: int = 10) -> n
 
 
 def threshold_sauvola_approx(gray: np.ndarray, window: int = 25, k: float = 0.2) -> np.ndarray:
-    """
-    Approximation de Sauvola : seuillage local basé sur moyenne et écart-type locaux.
-    Très robuste pour documents avec fond non uniforme (scan papier jauni, ombres).
-    """
+
     gray_f = gray.astype(np.float32)
     mean = cv2.boxFilter(gray_f, -1, (window, window))
     mean_sq = cv2.boxFilter(gray_f ** 2, -1, (window, window))
@@ -244,7 +220,7 @@ def threshold_sauvola_approx(gray: np.ndarray, window: int = 25, k: float = 0.2)
 
 
 def remove_borders(gray: np.ndarray, border_px: int = 10) -> np.ndarray:
-    """Supprimer les bordures noires d'un scan (artefact de numérisation)."""
+    # supprimer les bordures noires d'un scan
     h, w = gray.shape
     # Remplir les bords par blanc
     result = gray.copy()
@@ -256,22 +232,17 @@ def remove_borders(gray: np.ndarray, border_px: int = 10) -> np.ndarray:
 
 
 def morphological_cleanup(binary: np.ndarray) -> np.ndarray:
-    """Nettoyage morphologique : supprimer le bruit résiduel fin."""
+    # nettoyage morphologique
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    # Opening : élimine les petits spots de bruit
+    # opening : éloimine les petits spots de bruits
     opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
     return opened
 
 
-# ─────────────────────────────────────────────────────────────
 # STRATÉGIES DE PREPROCESSING
-# ─────────────────────────────────────────────────────────────
 
 def strategy_standard(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline standard pour document bien scanné.
-    grayscale → deskew → upscale → Otsu threshold
-    """
+    # pipeline standard pour document bien scanné
     gray = to_gray(img)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
@@ -281,33 +252,27 @@ def strategy_standard(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
 
 
 def strategy_blurry(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline pour image floue (scan de mauvaise qualité, photo smartphone).
-    unsharp mask fort → CLAHE → Sauvola threshold
-    """
+    # pipeline pour image floue
     gray = to_gray(img)
-    gray = upscale_if_needed(gray, target_min_dim=1600)  # Upscale modéré pour images floues
+    gray = upscale_if_needed(gray, target_min_dim=1600)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
-    # Accentuation contours
+    # accetation contours
     gray = unsharp_mask(gray, sigma=1.5, strength=2.0)
-    # Amélioration contraste local
+    # amélioration contraste local
     gray = apply_clahe(gray, clip_limit=4.0, tile_size=8)
     gray = remove_borders(gray)
-    # Sauvola robuste aux irrégularités
+
     return threshold_sauvola_approx(gray, window=25, k=0.15)
 
 
 def strategy_very_blurry(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline pour image très floue.
-    Upscale agressif → débruitage NLM → unsharp fort → adaptive threshold
-    """
+    # pipeline pour image très floue.
     gray = to_gray(img)
     gray = upscale_if_needed(gray, target_min_dim=1800)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
-    # Débruitage fort avant accentuation (sinon on accentue le bruit)
+    # débruitage fort avant accentuation
     gray = denoise(gray, strength=15)
     gray = unsharp_mask(gray, sigma=2.0, strength=2.5)
     gray = apply_clahe(gray, clip_limit=5.0)
@@ -316,10 +281,7 @@ def strategy_very_blurry(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
 
 
 def strategy_low_contrast(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline pour document pâle / peu contrasté (papier blanc + impression légère).
-    CLAHE aggressif → Otsu
-    """
+    # pipeline pour document pâle ou peu contrasté 
     gray = to_gray(img)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
@@ -330,15 +292,12 @@ def strategy_low_contrast(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
 
 
 def strategy_dark_scan(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline pour scan sombre (mauvais réglage scanner, photo à contre-jour).
-    Correction gamma → CLAHE → adaptive threshold
-    """
+    # pipeline pour scan sombre
     gray = to_gray(img)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
     gray = upscale_if_needed(gray)
-    # Éclaircir : gamma < 1
+    # éclaircir si le gamme est plus petit que 1
     gamma = 0.5 if quality.brightness < 50 else 0.7
     gray = gamma_correction(gray, gamma)
     gray = apply_clahe(gray, clip_limit=3.0)
@@ -347,10 +306,7 @@ def strategy_dark_scan(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
 
 
 def strategy_overexposed(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline pour scan surexposé / trop blanc (fond brûlé).
-    Gamma > 1 pour assombrir → Sauvola
-    """
+    # pipeline pour scan surexposé ou trop blanc 
     gray = to_gray(img)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
@@ -361,15 +317,12 @@ def strategy_overexposed(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
 
 
 def strategy_noisy(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
-    """
-    Pipeline pour scan très bruyant (basse résolution scannée, photocopie de photocopie).
-    Bilatéral → median → CLAHE → Otsu
-    """
+    #pipeline pour scan très bruyant
     gray = to_gray(img)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
     gray = upscale_if_needed(gray)
-    # Débruitage multicouche
+    # débruitage multicouche
     gray = denoise_bilateral(gray)
     gray = cv2.medianBlur(gray, 3)
     gray = apply_clahe(gray, clip_limit=2.5)
@@ -378,20 +331,15 @@ def strategy_noisy(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
     return morphological_cleanup(binary)
 
 
-# ─────────────────────────────────────────────────────────────
 # SÉLECTEUR DE STRATÉGIE
-# ─────────────────────────────────────────────────────────────
 
 def _score_preprocessed(binary: np.ndarray) -> float:
-    """
-    Score de lisibilité estimé d'une image binaire.
-    Combine : netteté des contours + rapport texte/fond raisonnable.
-    """
-    # Sharpness de l'image binaire (contours nets = score élevé)
+    #s core de lisibilité estimé d'une image binaire
+    # sharpness de l'image binaire
     sharpness = float(cv2.Laplacian(binary, cv2.CV_64F).var())
 
-    # Ratio noir/blanc (texte sombre sur fond blanc)
-    # Un bon document a entre 5% et 40% de pixels noirs
+    # ratio noir et blanc
+    # un bon document a entre 5% et 40% de pixels noirs
     black_ratio = float(np.sum(binary == 0)) / binary.size
     ratio_score = 100.0 if 0.05 <= black_ratio <= 0.40 else 0.0
 
@@ -399,10 +347,7 @@ def _score_preprocessed(binary: np.ndarray) -> float:
 
 
 def select_and_apply(img: np.ndarray) -> PreprocessResult:
-    """
-    Évaluer la qualité de l'image, sélectionner la meilleure stratégie,
-    et retourner l'image préprocessée avec métadonnées.
-    """
+    #évaluer la qualité de l'image
     quality = assess_quality(img)
     logger.info(
         "image_quality_assessed",
@@ -414,7 +359,7 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
         size=f"{quality.width}x{quality.height}",
     )
 
-    # Candidats à tester (stratégie → fonction)
+    # candidats à tester
     candidates_to_try = [("standard", strategy_standard)]
 
     if quality.is_very_blurry:
@@ -435,7 +380,7 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
     if quality.is_noisy:
         candidates_to_try.insert(0, ("noisy", strategy_noisy))
 
-    # Dédupliquer en conservant l'ordre
+    # dédupliquer en conservant l'ordre
     seen = set()
     unique_candidates = []
     for name, fn in candidates_to_try:
@@ -443,7 +388,7 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
             seen.add(name)
             unique_candidates.append((name, fn))
 
-    # Tester chaque stratégie et scorer le résultat
+    # tester chaqu'une des stratégie et scorer le résultat
     all_candidates = []
     best_name = "standard"
     best_img = None
@@ -463,7 +408,7 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
             logger.warning("strategy_failed", name=name, error=str(e))
 
     if best_img is None:
-        # Fallback absolu
+        # fallback absolu
         best_img = strategy_standard(img, quality)
         best_name = "standard_fallback"
 
@@ -486,22 +431,18 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
     )
 
 
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 def preprocess_image(img: np.ndarray) -> PreprocessResult:
-    """
-    Point d'entrée principal.
-    Accepte une image numpy BGR (chargée via cv2.imread ou depuis bytes).
-    """
+    # point d'entrée principal
+    # accepte une image numpy BGR 
     if img is None or img.size == 0:
         raise ValueError("Image vide ou invalide")
     return select_and_apply(img)
 
 
 def preprocess_from_bytes(image_bytes: bytes) -> PreprocessResult:
-    """Charger une image depuis des bytes et la préprocesser."""
+    # charger une image depuis des bytes et la préprocesser
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
@@ -510,7 +451,7 @@ def preprocess_from_bytes(image_bytes: bytes) -> PreprocessResult:
 
 
 def image_to_bytes(img: np.ndarray, ext: str = ".png") -> bytes:
-    """Convertir une image numpy en bytes pour stockage MinIO."""
+    # convertir une image numpy en bytes pour stockage MinIO
     success, buffer = cv2.imencode(ext, img)
     if not success:
         raise RuntimeError("Echec encodage image")

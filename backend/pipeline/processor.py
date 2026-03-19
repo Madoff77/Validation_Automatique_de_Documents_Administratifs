@@ -1,13 +1,3 @@
-"""
-Processeur de pipeline principal.
-
-Orchestré par Airflow task par task, mais aussi utilisable en standalone
-pour les tests ou le traitement synchrone.
-
-Chaque fonction correspond à une task Airflow.
-Les résultats sont persistés en MongoDB après chaque étape.
-"""
-
 import json
 import time
 import uuid
@@ -49,16 +39,9 @@ def _get_db():
     return client[settings.mongo_db]
 
 
-# ─────────────────────────────────────────────────────────────
-# TASK 1 — PREPROCESSING + OCR
-# ─────────────────────────────────────────────────────────────
+# PREPROCESSING + OCR
 
 def task_ocr(document_id: str) -> dict:
-    """
-    Télécharger le fichier brut depuis MinIO raw,
-    lancer l'OCR adaptatif, stocker le texte en zone clean.
-    Retourne les métadonnées OCR pour XCom Airflow.
-    """
     db = _get_db()
     doc = db.documents.find_one({"document_id": document_id})
     if not doc:
@@ -128,13 +111,10 @@ def task_ocr(document_id: str) -> dict:
         "ocr_method": ocr_result.method,
     }
 
-
-# ─────────────────────────────────────────────────────────────
-# TASK 2 — CLASSIFICATION
-# ─────────────────────────────────────────────────────────────
+# CLASSIFICATION
 
 def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
-    """Classifier le type de document."""
+    # classifier le type de document
     t_start = time.time()
     logger.info("task_classify_start", document_id=document_id)
 
@@ -171,9 +151,7 @@ def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
     return {"document_id": document_id, "doc_type": doc_type, "confidence": confidence}
 
 
-# ─────────────────────────────────────────────────────────────
-# TASK 3 — EXTRACTION CHAMPS
-# ─────────────────────────────────────────────────────────────
+#  EXTRACTION CHAMPS
 
 def task_extract(document_id: str, doc_type: Optional[str] = None, ocr_text: Optional[str] = None) -> dict:
     """Extraire les champs structurés du texte OCR."""
@@ -205,13 +183,10 @@ def task_extract(document_id: str, doc_type: Optional[str] = None, ocr_text: Opt
 
     return {"document_id": document_id, "extracted": extracted}
 
-
-# ─────────────────────────────────────────────────────────────
-# TASK 4 — VALIDATION
-# ─────────────────────────────────────────────────────────────
+# VALIDATION
 
 def task_validate(document_id: str) -> dict:
-    """Valider le document et détecter les anomalies inter-documents."""
+    # valider le document et détecter les anomalies
     logger.info("task_validate_start", document_id=document_id)
     db = _get_db()
     doc = db.documents.find_one({"document_id": document_id})
@@ -221,7 +196,7 @@ def task_validate(document_id: str) -> dict:
 
     supplier_id = doc["supplier_id"]
 
-    # Récupérer les autres documents du même fournisseur (déjà traités)
+    # récupérer les autres documents du même fournisseur qui sont deja traité
     sibling_docs = list(db.documents.find({
         "supplier_id": supplier_id,
         "document_id": {"$ne": document_id},
@@ -230,14 +205,14 @@ def task_validate(document_id: str) -> dict:
 
     validation_result, anomalies = validate_document(doc, sibling_docs)
 
-    # Persister anomalies
+    # persister anomalies
     for anomaly in anomalies:
         anomaly["anomaly_id"] = str(uuid.uuid4())
         anomaly["detected_at"] = datetime.now(timezone.utc)
         anomaly["resolved"] = False
         db.anomalies.insert_one(anomaly)
 
-    # Mettre à jour statut conformité fournisseur
+    # mettre à jour statut conformité fournisseur
     unresolved = db.anomalies.count_documents({"supplier_id": supplier_id, "resolved": False})
     critical = db.anomalies.count_documents({"supplier_id": supplier_id, "resolved": False, "severity": "error"})
 
@@ -275,12 +250,9 @@ def task_validate(document_id: str) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────
-# TASK 5 — FINALISATION (zone curated)
-# ─────────────────────────────────────────────────────────────
+#  FINALISATION
 
 def task_finalize(document_id: str) -> dict:
-    """Stocker les données structurées finales en zone curated."""
     logger.info("task_finalize_start", document_id=document_id)
     db = _get_db()
     doc = db.documents.find_one({"document_id": document_id})
@@ -320,12 +292,10 @@ def task_finalize(document_id: str) -> dict:
     return {"document_id": document_id, "curated_path": curated_path}
 
 
-# ─────────────────────────────────────────────────────────────
-# PIPELINE COMPLET (hors Airflow — pour tests)
-# ─────────────────────────────────────────────────────────────
+# PIPELINE COMPLET
 
 def run_full_pipeline(document_id: str) -> dict:
-    """Exécuter le pipeline complet de façon synchrone (tests, debug)."""
+    # Exécuter le pipeline complet de façon synchrone (tests, debug)
     t_start = time.time()
     logger.info("full_pipeline_start", document_id=document_id)
 

@@ -49,7 +49,7 @@ def require_roles(*roles: UserRole):
     return role_checker
 
 
-# Dépendances raccourcies
+# dépendances racourcies
 require_admin = require_roles(UserRole.ADMIN)
 require_operator = require_roles(UserRole.ADMIN, UserRole.OPERATOR)
 require_viewer = require_roles(UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER)

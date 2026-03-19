@@ -1,45 +1,23 @@
-"""
-Moteur de validation métier.
-
-Deux niveaux de validation :
-1. Intra-document : champs obligatoires, formats, cohérence interne (HT+TVA=TTC)
-2. Inter-documents : cohérence SIRET entre docs du même fournisseur,
-   expirations URSSAF/Kbis, doublons
-
-Chaque règle retourne un ValidationCheck et éventuellement une anomalie à persister.
-Les anomalies sont séparées des checks : les checks sont stockés sur le document,
-les anomalies dans la collection dédiée pour le dashboard compliance.
-
-Sévérités :
-  error   → bloquant, non-conforme légalement
-  warning → à surveiller, action recommandée
-  info    → informatif
-"""
-
 from datetime import datetime, timezone, timedelta
 from typing import List, Tuple, Dict, Any, Optional
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Tolérance pour la vérification HT+TVA=TTC (1€ ou 0.5%)
+# tolérance pour la vérification HT+TVA=TTC
 TVA_COHERENCE_TOLERANCE_EUR = 1.0
 TVA_COHERENCE_TOLERANCE_PCT = 0.005
 
-# Durée max de validité d'un Kbis (réglementation française)
+# durée max de validité d'un Kbis (réglementation française)
 KBIS_MAX_VALIDITY_DAYS = 90
 
-# Durée d'alerte avant expiration (prévenir 30 jours avant)
+# durée d'alerte avant expiration (prévenir 30 jours avant)
 EXPIRATION_WARNING_DAYS = 30
 
-
-# ─────────────────────────────────────────────────────────────
 # UTILITAIRES
-# ─────────────────────────────────────────────────────────────
 
 def _check(rule: str, ok: bool, message_ok: str, message_fail: str,
            severity: str = "error", details: Optional[dict] = None) -> dict:
-    """Construire un ValidationCheck dict."""
     return {
         "rule": rule,
         "status": "ok" if ok else severity,
@@ -76,21 +54,13 @@ def _parse_iso_date(date_str: Optional[str]) -> Optional[datetime]:
     except Exception:
         return None
 
-
-# ─────────────────────────────────────────────────────────────
 # VALIDATION SIRET
-# ─────────────────────────────────────────────────────────────
 
 def _luhn_check_siret(siret: str) -> bool:
-    """
-    Validation Luhn du SIRET (algorithme de Luhn mod 10).
-    Référence : INSEE — tous les SIRET valides passent ce test.
-    Exception : entreprises La Poste (débutant par 356) utilisent règle spéciale.
-    """
     if not siret or len(siret) != 14 or not siret.isdigit():
         return False
 
-    # Cas spécial La Poste
+    # cas spécial La Poste
     if siret.startswith("356"):
         return sum(int(d) for d in siret) % 5 == 0
 
@@ -117,9 +87,7 @@ def validate_siret_format(siret: Optional[str]) -> Tuple[bool, str]:
     return True, "SIRET valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION IBAN
-# ─────────────────────────────────────────────────────────────
 
 def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     if not iban:
@@ -127,7 +95,7 @@ def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     iban = iban.replace(" ", "").upper()
     if not iban.startswith("FR") or len(iban) != 27:
         return False, f"Format IBAN français incorrect : {iban}"
-    # Vérification MOD-97 standard
+    # vérification
     rearranged = iban[4:] + iban[:4]
     numeric = ''.join(str(ord(c) - 55) if c.isalpha() else c for c in rearranged)
     try:
@@ -138,12 +106,9 @@ def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     return True, "IBAN valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION TVA NUMÉRO
-# ─────────────────────────────────────────────────────────────
 
 def validate_tva_number(tva: Optional[str], siren: Optional[str] = None) -> Tuple[bool, str]:
-    """Vérifier cohérence TVA ↔ SIREN (clé calculée)."""
     if not tva:
         return False, "Numéro TVA absent"
     tva_clean = tva.replace(" ", "").upper()
@@ -158,13 +123,11 @@ def validate_tva_number(tva: Optional[str], siren: Optional[str] = None) -> Tupl
             if tva_key != expected_key:
                 return False, f"Clé TVA incohérente avec SIREN (attendu FR{expected_key:02d}, trouvé FR{tva_key:02d})"
         except ValueError:
-            pass  # Clé alphanumérique — on ne valide pas la cohérence SIREN
+            pass  # Clé alphanumérique  on ne valide pas la cohérence SIREN
     return True, "Numéro TVA valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION COHÉRENCE TVA (HT × taux = TVA, HT + TVA = TTC)
-# ─────────────────────────────────────────────────────────────
 
 def validate_tva_coherence(
     ht: Optional[float],
@@ -172,7 +135,6 @@ def validate_tva_coherence(
     ttc: Optional[float],
     taux: Optional[float],
 ) -> Tuple[bool, str, dict]:
-    """Vérifier HT + TVA = TTC avec tolérance."""
     details = {"ht": ht, "tva": tva_amount, "ttc": ttc, "taux": taux}
 
     if not all([ht is not None, tva_amount is not None, ttc is not None]):
@@ -181,7 +143,6 @@ def validate_tva_coherence(
     expected_ttc = round(ht + tva_amount, 2)
     ecart = abs(expected_ttc - ttc)
 
-    # Tolérance absolue ET relative
     tolerance = max(TVA_COHERENCE_TOLERANCE_EUR, abs(ttc) * TVA_COHERENCE_TOLERANCE_PCT)
 
     if ecart > tolerance:
@@ -189,7 +150,6 @@ def validate_tva_coherence(
         details["expected_ttc"] = expected_ttc
         return False, f"Incohérence HT+TVA≠TTC : {ht} + {tva_amount} = {expected_ttc} ≠ {ttc} (écart {ecart:.2f}€)", details
 
-    # Vérifier aussi HT × taux = TVA si taux disponible
     if taux and ht:
         expected_tva = round(ht * taux / 100, 2)
         ecart_tva = abs(expected_tva - tva_amount)
@@ -201,19 +161,13 @@ def validate_tva_coherence(
     return True, "Cohérence TVA vérifiée", details
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION DATES D'EXPIRATION
-# ─────────────────────────────────────────────────────────────
 
 def validate_expiration(
     date_expiration: Optional[str],
     doc_type: str,
     now: Optional[datetime] = None,
 ) -> Tuple[str, str, str]:  # (status, message, anomaly_type)
-    """
-    Vérifier si une date d'expiration est dans les limites acceptables.
-    Retourne (status: ok/warning/error, message, anomaly_type).
-    """
     now = now or datetime.now(timezone.utc)
     exp = _parse_iso_date(date_expiration)
 
@@ -240,10 +194,6 @@ def validate_kbis_age(
     date_emission: Optional[str],
     now: Optional[datetime] = None,
 ) -> Tuple[str, str]:
-    """
-    Kbis légalement valide uniquement si émis il y a moins de 3 mois.
-    Retourne (status, message).
-    """
     now = now or datetime.now(timezone.utc)
     emission = _parse_iso_date(date_emission)
 
@@ -262,19 +212,13 @@ def validate_kbis_age(
     return "ok", f"Kbis valide ({age_days} jours, limite {KBIS_MAX_VALIDITY_DAYS} jours)"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION INTER-DOCUMENTS (cohérence fournisseur)
-# ─────────────────────────────────────────────────────────────
 
 def validate_siret_consistency(
     current_doc: dict,
     sibling_docs: List[dict],
 ) -> List[Tuple[bool, str, dict]]:
-    """
-    Vérifier que le SIRET du document courant est cohérent avec
-    les autres documents du même fournisseur.
-    Retourne une liste de (ok, message, details).
-    """
+    # vérifier que le SIRET du document courant est cohérent avec les autres documents du même fournisseur
     issues = []
     current_siret = current_doc.get("extracted", {}).get("siret")
     if not current_siret:
@@ -300,36 +244,17 @@ def validate_siret_consistency(
     return issues
 
 
-# ─────────────────────────────────────────────────────────────
 # RÈGLES PAR TYPE DE DOCUMENT
-# ─────────────────────────────────────────────────────────────
 
 def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], List[dict]]:
-    """
-    Validation d'une facture.
-
-    Philosophie : pas de législation imposant un format strict de facture
-    entre professionnels en France (art. L441-9 CGI liste les mentions
-    obligatoires mais l'absence d'un champ n'est pas un motif de rejet
-    d'un point de vue compliance fournisseur).
-
-    Règles appliquées :
-    - SIRET : vérifié UNIQUEMENT s'il a été extrait par OCR. Absent = pas de check
-      (l'OCR ne l'a pas trouvé, ce n'est pas un défaut du document).
-    - Cohérence TVA (HT + TVA = TTC) : vérifiée si au moins TTC extrait.
-      Incohérence avérée = anomalie warning.
-    - Champs financiers manquants : INFO seulement, pas d'anomalie
-      (c'est une limite OCR, non un problème de conformité).
-    - SIRET inter-docs : si SIRET extrait, vérifier cohérence avec autres docs
-      du même fournisseur (incohérence = anomalie error).
-    """
+    # validation d'une facture.
     checks = []
     anomalies = []
     extracted = doc.get("extracted", {})
     sid = doc["supplier_id"]
     did = doc["document_id"]
 
-    # 1. SIRET — seulement si extrait par OCR
+    # SIRET seulement si extrait par OCR
     siret = extracted.get("siret")
     if siret:
         valid_siret, msg_siret = validate_siret_format(siret)
@@ -340,7 +265,7 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
                                             f"Facture {doc['original_filename']} : {msg_siret}",
                                             {"siret": siret}))
 
-    # 2. Cohérence TVA — seulement si des montants ont été extraits
+    #Cohérence TVA 
     ht = extracted.get("montant_ht")
     tva = extracted.get("montant_tva")
     ttc = extracted.get("montant_ttc")
@@ -352,8 +277,7 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
         if not tva_ok:
             anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
 
-    # 3. Présence des champs financiels clés — INFO uniquement, pas d'anomalie
-    #    (champ non extrait = limite OCR, pas un défaut du document)
+    # Présence des champs financiels clés
     for field_name, label in [
         ("montant_ttc",   "Montant TTC"),
         ("montant_ht",    "Montant HT"),
@@ -367,7 +291,7 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
             "details": {"field": field_name},
         })
 
-    # 4. Cohérence SIRET inter-docs — seulement si SIRET présent
+    # Cohérence SIRET inter-docs
     if siret:
         for ok, msg, details in validate_siret_consistency(doc, sibling_docs):
             checks.append(_check("siret_consistency", ok, "SIRET cohérent entre documents", msg,
@@ -382,21 +306,14 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
 
 
 def _validate_devis(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], List[dict]]:
-    """
-    Validation d'un devis.
-
-    Philosophie : le devis est un document commercial, pas un document de
-    conformité légale. On vérifie la cohérence financière si les montants
-    sont disponibles, et la validité temporelle.
-    Aucune exigence de SIRET (non obligatoire sur un devis).
-    """
+    # validation d'un devis
     checks = []
     anomalies = []
     extracted = doc.get("extracted", {})
     sid = doc["supplier_id"]
     did = doc["document_id"]
 
-    # 1. Cohérence TVA — seulement si des montants ont été extraits
+    # cohérence TVA 
     ht = extracted.get("montant_ht")
     tva = extracted.get("montant_tva")
     ttc = extracted.get("montant_ttc")
@@ -408,7 +325,7 @@ def _validate_devis(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], Li
         if not tva_ok:
             anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
 
-    # 2. Présence des champs clés — INFO uniquement
+    # présence des champs clés
     for field_name, label in [
         ("montant_ttc",   "Montant TTC"),
         ("raison_sociale","Raison sociale émetteur"),
@@ -422,7 +339,7 @@ def _validate_devis(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], Li
             "details": {"field": field_name},
         })
 
-    # 3. Date d'expiration — warning si devis expiré (anomalie commerciale)
+    # date d'expiration warning si devis expiré
     exp_date = extracted.get("date_expiration")
     if exp_date:
         status, msg, atype = validate_expiration(exp_date, "DEVIS")
@@ -449,7 +366,7 @@ def _validate_urssaf(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], L
     checks.append(_check("siret_format", valid_siret, "SIRET valide", msg_siret,
                           severity="error", details={"siret": siret}))
 
-    # Expiration URSSAF — critique
+    # Expiration URSSAF critique
     exp_date = extracted.get("date_expiration")
     status, msg, atype = validate_expiration(exp_date, "URSSAF")
     severity_map = {"ok": "ok", "warning": "warning", "error": "error"}
@@ -586,9 +503,7 @@ def _validate_siret_doc(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict]
     return checks, anomalies
 
 
-# ─────────────────────────────────────────────────────────────
 # DISPATCH ET API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 _VALIDATORS = {
     "FACTURE": _validate_facture,
@@ -605,13 +520,7 @@ def validate_document(
     doc: dict,
     sibling_docs: List[dict],
 ) -> Tuple[dict, List[dict]]:
-    """
-    Valider un document et retourner :
-    - validation_result : dict {status, checks} pour MongoDB documents
-    - anomalies : list de dicts à insérer dans collection anomalies
-
-    sibling_docs : autres documents traités du même fournisseur
-    """
+    # Valider un document et retourner le résultat de validation et les anomalies
     doc_type = doc.get("doc_type", "UNKNOWN")
     validator = _VALIDATORS.get(doc_type, _VALIDATORS["UNKNOWN"])
 

@@ -26,7 +26,7 @@ def configure_logging():
         cache_logger_on_first_use=True,
     )
 
-    # Réduire verbosité libs tierces
+    # Réduire verbosité
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("motor").setLevel(logging.WARNING)
     logging.getLogger("pymongo").setLevel(logging.WARNING)

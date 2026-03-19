@@ -1,12 +1,3 @@
-"""
-Template DEVIS — 3 variantes de mise en page.
-
-Variantes :
-  - layout A : titre "DEVIS" en haut (classique)
-  - layout B : titre "PROPOSITION COMMERCIALE" (moins évident)
-  - layout C : style offre avec conditions d'acceptation détaillées
-"""
-
 import random
 from datetime import date, timedelta
 from .helpers import fake, get_company, _gen_amounts, _gen_date_past

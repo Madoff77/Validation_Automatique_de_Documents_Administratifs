@@ -2,7 +2,7 @@ FROM apache/airflow:2.9.1-python3.11
 
 USER root
 
-# Dépendances système pour OCR (même que le backend)
+# dépendance système pour OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-fra \

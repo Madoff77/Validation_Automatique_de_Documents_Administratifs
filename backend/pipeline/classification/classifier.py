@@ -1,19 +1,3 @@
-"""
-Classifier de documents administratifs.
-
-Architecture : TF-IDF (1-2 grams, 5000 features) + Random Forest (200 arbres).
-
-Pourquoi Random Forest ?
-  - Interprétable : feature importances montrent les mots discriminants par classe
-  - Robuste au bruit OCR : les fautes d'OCR sont rares dans les mots discriminants
-  - Pas de GPU nécessaire, latence < 50ms
-  - Fonctionne très bien avec peu de données (50-150 par classe)
-  - Calibré naturellement → probabilités fiables pour seuil de confiance
-
-Fallback keyword : si le modèle n'est pas chargé OU si la confiance < seuil,
-on utilise un classifieur à règles lexicales simples.
-"""
-
 import os
 import re
 from typing import Tuple, Dict, Optional, List
@@ -27,11 +11,7 @@ logger = get_logger(__name__)
 
 DOC_TYPES = ["FACTURE", "DEVIS", "SIRET", "URSSAF", "KBIS", "RIB"]
 
-# ─────────────────────────────────────────────────────────────
-# CLASSIFIEUR PAR RÈGLES (fallback sans modèle ML)
-# ─────────────────────────────────────────────────────────────
-
-# Mots-clés discriminants par classe, avec poids relatifs
+# les mots clés discriminants par classe avec des poids relatifs
 KEYWORD_RULES: Dict[str, List[Tuple[str, float]]] = {
     "FACTURE": [
         ("facture", 4.0), ("numéro de facture", 5.0), ("fact-", 3.0),
@@ -39,8 +19,6 @@ KEYWORD_RULES: Dict[str, List[Tuple[str, float]]] = {
         ("pénalités de retard", 4.0), ("indemnité forfaitaire", 4.0),
         ("mode de règlement", 3.0), ("escompte", 2.5),
         ("vendeur", 2.0), ("acheteur", 2.0),
-        # "tva" retiré : trop générique, présent aussi dans DEVIS → confusion
-        # "montant ttc/ht/total ttc" retirés : présents dans DEVIS aussi
     ],
     "DEVIS": [
         ("devis", 4.0), ("proposition commerciale", 5.0),
@@ -94,7 +72,6 @@ def classify_by_keywords(text: str) -> Tuple[str, float, Dict[str, float]]:
         for kw, weight in keywords:
             count = len(re.findall(re.escape(kw), text_lower))
             score += count * weight
-        # Normaliser par longueur du texte (densité)
         scores[doc_type] = score / (word_count / 100.0)
 
     if not scores or max(scores.values()) == 0:
@@ -108,20 +85,9 @@ def classify_by_keywords(text: str) -> Tuple[str, float, Dict[str, float]]:
     return best, confidence, probs
 
 
-# ─────────────────────────────────────────────────────────────
-# CLASSIFIEUR ML (TF-IDF + Random Forest)
-# ─────────────────────────────────────────────────────────────
+# classifieur ML (TF-IDF + Random Forest)
 
 class DocumentClassifier:
-    """
-    Classifieur TF-IDF + Random Forest avec fallback keyword.
-
-    Méthodes publiques :
-      load()              : charger modèle depuis disque
-      predict(text)       : classer un document
-      get_feature_names() : mots importants par classe (pour jury)
-    """
-
     def __init__(
         self,
         model_path: str = "/app/models/trained/classifier.joblib",
@@ -136,7 +102,7 @@ class DocumentClassifier:
         self._is_loaded = False
 
     def load(self) -> bool:
-        """Charger le modèle pré-entraîné depuis le disque."""
+        """charger le modèle pré entraîné"""
         if not os.path.exists(self.model_path) or not os.path.exists(self.vectorizer_path):
             logger.warning(
                 "classifier_model_not_found",
@@ -173,10 +139,10 @@ class DocumentClassifier:
         if not text or not text.strip():
             return "UNKNOWN", 0.0, {k: 0.0 for k in DOC_TYPES}
 
-        # Préprocesser le texte
+        # préprocesser le texte
         clean_text = self._preprocess(text)
 
-        # ── Prédiction ML ─────────────────────────────────────
+        # prédiction ML
         if self._is_loaded and self._model and self._vectorizer:
             try:
                 X = self._vectorizer.transform([clean_text])
@@ -190,7 +156,7 @@ class DocumentClassifier:
                     logger.debug("classify_ml", doc_type=best, confidence=round(confidence, 3))
                     return best, confidence, probs
 
-                # Confiance faible → combiner avec keyword
+                # confiance faible donc on combine avec keyword
                 kw_type, kw_conf, kw_probs = classify_by_keywords(text)
                 if kw_conf > confidence:
                     logger.info(
@@ -205,7 +171,7 @@ class DocumentClassifier:
             except Exception as e:
                 logger.warning("classify_ml_failed", error=str(e))
 
-        # ── Fallback keyword ───────────────────────────────────
+        # fallback keyword
         kw_type, kw_conf, kw_probs = classify_by_keywords(text)
         logger.debug("classify_keyword", doc_type=kw_type, confidence=round(kw_conf, 3))
         return kw_type, kw_conf, kw_probs
@@ -222,32 +188,28 @@ class DocumentClassifier:
         """
         text = text.lower()
 
-        # Normaliser montants (ex: "1 234,56 €" → "MONTANT_EUR")
+        # normaliser montants (ex: "1 234,56 €" → "MONTANT_EUR")
         text = re.sub(r'\d[\d\s]*[,\.]\d{2}\s*(?:€|eur)', ' montant_eur ', text)
 
-        # Normaliser dates
+        # dates
         text = re.sub(r'\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4}', ' date_doc ', text)
         text = re.sub(r'\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}', ' date_doc ', text)
 
-        # Normaliser SIRET/SIREN (remplacer par tokens)
+        # SIRET/SIREN
         text = re.sub(r'\b\d{14}\b', ' num_siret ', text)
         text = re.sub(r'\b\d{9}\b', ' num_siren ', text)
         text = re.sub(r'\bfr[\s\d]{11,13}\b', ' num_tva ', text)
         text = re.sub(r'\bfr\d{2}[\s\d]{23,27}\b', ' num_iban ', text)
 
-        # Supprimer séquences de symboles
+        # supprimer séquences de symboles
         text = re.sub(r'[━─═]{3,}', ' separateur ', text)
         text = re.sub(r'[^\w\sàâäéèêëïîôùûüç]', ' ', text)
 
-        # Compresser espaces multiples
+        # compresser espaces multiples
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def get_top_features(self, doc_type: str, n: int = 20) -> List[Tuple[str, float]]:
-        """
-        Retourner les N features (mots) les plus importantes pour une classe.
-        Utile pour expliquer le modèle au jury.
-        """
         if not self._is_loaded:
             return []
         try:
@@ -255,7 +217,7 @@ class DocumentClassifier:
             feature_names = self._vectorizer.get_feature_names_out()
             importances = self._model.estimators_[0].feature_importances_  # 1er arbre pour approx
 
-            # Moyenne sur tous les arbres pour la classe
+            # moyenne sur tous les arbres pour la classe
             all_importances = np.mean(
                 [tree.feature_importances_ for tree in self._model.estimators_], axis=0
             )
@@ -269,9 +231,7 @@ class DocumentClassifier:
         return self._is_loaded
 
 
-# ─────────────────────────────────────────────────────────────
-# SINGLETON (chargé une seule fois en mémoire)
-# ─────────────────────────────────────────────────────────────
+# singleton pour chargé une seule fois en mémoire
 
 _instance: Optional[DocumentClassifier] = None
 

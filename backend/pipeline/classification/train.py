@@ -1,20 +1,3 @@
-"""
-Script d'entraînement du classifier de documents.
-
-Usage :
-  python -m pipeline.classification.train
-  python -m pipeline.classification.train --n-per-class 200 --output /app/models/trained
-
-Pipeline :
-  1. Génération données synthétiques → images dégradées → Tesseract OCR
-  2. Préprocessing TF-IDF
-  3. Entraînement Random Forest avec class_weight='balanced'
-  4. Évaluation : cross-validation + rapport de classification
-  5. Sauvegarde modèle + vectorizer + rapport
-
-Reproductibilité : random_state=42 partout.
-"""
-
 import sys
 import os
 import json
@@ -36,10 +19,10 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.pipeline import Pipeline
 import joblib
 
-# Ajouter les chemins nécessaires
+# rajouter les chemins nécessaire
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../backend"))
 sys.path.insert(0, "/app/data-generator")  # Absolu (Docker)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../data-generator"))  # Relatif (local)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../data-generator"))  # relatif ( en local)
 
 from pipeline.classification.classifier import DocumentClassifier, DOC_TYPES
 
@@ -51,15 +34,8 @@ RESET = "\033[0m"
 
 
 def generate_training_data(n_per_class: int) -> list:
-    """
-    Générer les données d'entraînement via le vrai pipeline OCR.
+    # générer les données d'entraînement via le vrai pipeline OCR.
 
-    Pipeline :
-      template text → image PNG → dégradation → Tesseract OCR → texte réel
-
-    Le modèle apprend ainsi exactement ce que le pipeline verra en production,
-    avec les artefacts réels de Tesseract (pas une simulation textuelle).
-    """
     import io
     import random
     import cv2
@@ -78,14 +54,14 @@ def generate_training_data(n_per_class: int) -> list:
         print("    Docker : volume mount ./data-generator:/app/data-generator")
         raise SystemExit(1)
 
-    # Distribution des dégradations — couvre les cas réels de scan
+    # distribution des dégradations pour couvrir les cas réels de scan
     DEGRADATION_SCHEDULE = [
         (0.40, None,             None),           # 40% : PDF natif propre
-        (0.60, "noise",          (0.1, 0.35)),    # 20% : bruit léger (bon scanner)
-        (0.75, "blur",           (0.2, 0.5)),     # 15% : flou (mise au point imparfaite)
-        (0.87, "rotation",       (0.05, 0.25)),   # 12% : rotation (page mal alignée)
+        (0.60, "noise",          (0.1, 0.35)),    # 20% : bruit léger
+        (0.75, "blur",           (0.2, 0.5)),     # 15% : flou
+        (0.87, "rotation",       (0.05, 0.25)),   # 12% : rotation
         (0.95, "combined",       (0.3, 0.6)),     # 8%  : dégradation combinée
-        (1.00, "low_resolution", (0.3, 0.65)),    # 5%  : basse résolution (vieux scanner)
+        (1.00, "low_resolution", (0.3, 0.65)),    # 5%  : basse résolution
     ]
 
     dataset = []
@@ -108,12 +84,11 @@ def generate_training_data(n_per_class: int) -> list:
                             deg_applied = deg_type
                         break
 
-                # Image numpy → bytes JPEG (même format que le pipeline production)
+                # images numpy : bytes JPEG (meme format que le pipeline production)
                 pil_img = PILImage.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
                 buf = io.BytesIO()
                 pil_img.save(buf, format="JPEG", quality=75)
 
-                # Vrai Tesseract — même fonction que task_ocr()
                 ocr_result = extract_text(buf.getvalue(), "image/jpeg")
 
                 if ocr_result.text.strip():
@@ -160,23 +135,14 @@ def build_vectorizer(texts: list) -> TfidfVectorizer:
         min_df=2,
         max_df=0.95,
         analyzer='word',
-        token_pattern=r'(?u)\b[a-zA-ZÀ-ÿ_][a-zA-ZÀ-ÿ_]{2,}\b',  # Mots ≥ 3 chars
-        strip_accents=None,  # Garder les accents français (discriminants)
+        token_pattern=r'(?u)\b[a-zA-ZÀ-ÿ_][a-zA-ZÀ-ÿ_]{2,}\b',  # mots ≥ 3 chars
+        strip_accents=None,  # garder les accents français
         lowercase=True,
     )
 
 
 def train_random_forest(X_train, y_train) -> RandomForestClassifier:
-    """
-    Random Forest calibré.
-
-    Hyperparamètres :
-    - n_estimators=200 : bonne précision sans surapprentissage
-    - max_features='sqrt' : standard RF, réduit corrélation entre arbres
-    - class_weight='balanced' : compense déséquilibre de classes éventuel
-    - min_samples_leaf=2 : évite le surajustement sur les petits groupes
-    - n_jobs=-1 : parallélisation maximale
-    """
+# nos hyperparametres : 
     return RandomForestClassifier(
         n_estimators=200,
         max_features="sqrt",
@@ -189,7 +155,7 @@ def train_random_forest(X_train, y_train) -> RandomForestClassifier:
 
 
 def evaluate(model, vectorizer, X_test_raw, y_test, classes) -> dict:
-    """Évaluer le modèle sur le jeu de test."""
+    #evaluer notre modele 
     X_test = vectorizer.transform(X_test_raw)
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)
@@ -230,7 +196,6 @@ def cross_validate(model_factory, vectorizer, texts, labels, cv=5) -> dict:
 
 
 def print_report(metrics: dict, cv_metrics: dict, classes: list):
-    """Afficher le rapport d'entraînement formaté."""
     print(f"\n{'═'*60}")
     print("  RÉSULTATS D'ÉVALUATION")
     print(f"{'═'*60}")
@@ -270,14 +235,14 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     start_time = datetime.now()
 
-    # ── 1. Données ─────────────────────────────────────────────
+    # données
     dataset = generate_training_data(n_per_class)
     texts_raw = [t for t, _ in dataset]
     labels = [l for _, l in dataset]
 
     print(f"\n  Distribution : { {c: labels.count(c) for c in DOC_TYPES} }")
 
-    # ── 2. Préprocessing ────────────────────────────────────────
+    # préprocessing
     print(f"\n{'═'*60}")
     print("  PRÉPROCESSING TF-IDF")
     print(f"{'═'*60}")
@@ -293,27 +258,27 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     print(f"  Train : {X_train.shape[0]} exemples, {X_train.shape[1]} features")
     print(f"  Test  : {X_test.shape[0]} exemples")
 
-    # ── 3. Entraînement ─────────────────────────────────────────
+    # entraînement
     print(f"\n{'═'*60}")
     print("  ENTRAÎNEMENT — Random Forest (200 arbres)")
     print(f"{'═'*60}")
     model = train_random_forest(X_train, y_train)
     model.fit(X_train, y_train)
-    print("  Modèle entraîné ✓")
+    print("  Modèle entraîné ")
 
-    # ── 4. Cross-validation ─────────────────────────────────────
+    # cross-validation
     print("\n  Cross-validation en cours (5 folds)...")
     cv_metrics = cross_validate(
-        train_random_forest(None, None),  # factory
-        build_vectorizer([]),             # sera re-fit dans CV
+        train_random_forest(None, None),
+        build_vectorizer([]),            
         texts_processed, labels, cv=5
     )
 
-    # ── 5. Évaluation ───────────────────────────────────────────
+    # evaluation
     metrics = evaluate(model, vectorizer, X_test_raw, y_test, DOC_TYPES)
     print_report(metrics, cv_metrics, DOC_TYPES)
 
-    # ── 6. Top features par classe ──────────────────────────────
+    # Top features par classe
     print(f"\n{'─'*60}")
     print("  TOP FEATURES PAR CLASSE (interprétabilité)")
     print(f"{'─'*60}")
@@ -321,19 +286,19 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     all_importances = np.mean([tree.feature_importances_ for tree in model.estimators_], axis=0)
     top_n = 8
     for cls in DOC_TYPES:
-        # Approche : features avec plus de variance dans les prédictions de la classe
+        # features avec plus de variance dans les prédictions de la classe
         top_idx = np.argsort(all_importances)[::-1][:top_n]
         top_features = [feature_names[i] for i in top_idx]
         color = DOC_TYPE_COLORS.get(cls, "")
         print(f"  {color}{cls:<10}{RESET}: {', '.join(top_features[:6])}")
 
-    # ── 7. Sauvegarde ───────────────────────────────────────────
+    # sauvegarde
     model_path = os.path.join(output_dir, "classifier.joblib")
     vectorizer_path = os.path.join(output_dir, "vectorizer.joblib")
     joblib.dump(model, model_path, compress=3)
     joblib.dump(vectorizer, vectorizer_path, compress=3)
 
-    # Sauvegarder le rapport complet
+    # sauvegarder le rapport complet
     report_data = {
         "trained_at": start_time.isoformat(),
         "n_per_class": n_per_class,
@@ -370,17 +335,17 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     print(f"  Durée totale           : {duration:.1f}s")
     print(f"{'═'*60}\n")
 
-    # ── Verdict final ───────────────────────────────────────────
+    # verdict final 
     acc = metrics["accuracy"]
     f1 = metrics["f1_macro"]
     if acc >= 0.92 and f1 >= 0.90:
-        print(f"  ✅ Modèle EXCELLENT  (accuracy={acc:.3f}, F1={f1:.3f})")
+        print(f"  Modèle excellent  (accuracy={acc:.3f}, F1={f1:.3f})")
     elif acc >= 0.85 and f1 >= 0.82:
-        print(f"  ✅ Modèle BON        (accuracy={acc:.3f}, F1={f1:.3f})")
+        print(f"  Modèle bon        (accuracy={acc:.3f}, F1={f1:.3f})")
     elif acc >= 0.75:
-        print(f"  ⚠️  Modèle ACCEPTABLE (accuracy={acc:.3f}, F1={f1:.3f}) — augmenter n_per_class")
+        print(f" Modèle acceptable (accuracy={acc:.3f}, F1={f1:.3f})")
     else:
-        print(f"  ❌ Modèle INSUFFISANT (accuracy={acc:.3f}, F1={f1:.3f}) — vérifier les données")
+        print(f" Modèle insuffisant (accuracy={acc:.3f}, F1={f1:.3f})")
 
     return report_data
 

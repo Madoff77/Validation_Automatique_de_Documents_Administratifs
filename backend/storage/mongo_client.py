@@ -17,7 +17,6 @@ def get_client() -> AsyncIOMotorClient:
 
 
 def get_sync_client() -> MongoClient:
-    """Client MongoDB synchrone (PyMongo) — à utiliser dans du code non-async (processor, Airflow)."""
     global _sync_client
     if _sync_client is None:
         _sync_client = MongoClient(settings.mongo_uri)
@@ -31,7 +30,7 @@ async def get_db() -> AsyncIOMotorDatabase:
 async def connect():
     global _client
     _client = AsyncIOMotorClient(settings.mongo_uri)
-    # Vérification connexion
+    # vérification de la connexion
     await _client.admin.command("ping")
     logger.info("mongodb_connected", uri=settings.mongo_uri, db=settings.mongo_db)
 
