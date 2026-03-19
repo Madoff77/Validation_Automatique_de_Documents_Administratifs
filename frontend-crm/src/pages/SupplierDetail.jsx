@@ -14,7 +14,7 @@ import {
     OctagonAlert,
     Database,
     Folder,
-    Plus
+    Plus,
 } from "lucide-react";
 import { suppliersApi } from "@/api/suppliers";
 import { documentsApi } from "@/api/documents";
@@ -28,14 +28,18 @@ import { format } from "date-fns";
 
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+    EmptyContent,
+} from "@/components/ui/empty";
 
 function Field({
     label,
@@ -44,6 +48,8 @@ function Field({
     onChange,
     editing,
     placeholder = "—",
+    multiline = false,
+    readOnly = false,
 }) {
     return (
         <div>
@@ -51,11 +57,22 @@ function Field({
                 {label}
             </p>
             {editing ? (
-                <Input
-                    value={editValue ?? ""}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder={placeholder}
-                />
+                multiline ? (
+                    <Textarea
+                        value={editValue ?? ""}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={placeholder}
+                        rows={4}
+                        readOnly={readOnly}
+                    />
+                ) : (
+                    <Input
+                        value={editValue ?? ""}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={placeholder}
+                        readOnly={readOnly}
+                    />
+                )
             ) : (
                 <p className="text-sm">
                     {value || (
@@ -197,9 +214,7 @@ export default function SupplierDetail() {
     return (
         <div className="p-8 max-w-6xl mx-auto">
             <Button variant="secondary" size="sm" className="mb-6" asChild>
-                <Link
-                    to="/suppliers"
-                >
+                <Link to="/suppliers">
                     <ArrowLeft size={15} /> Fournisseurs
                 </Link>
             </Button>
@@ -209,9 +224,7 @@ export default function SupplierDetail() {
                         <Building2 size={28} className="text-primary-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold">
-                            {supplier.name}
-                        </h1>
+                        <h1 className="text-2xl font-bold">{supplier.name}</h1>
                         <div className="flex items-center gap-2 mt-1">
                             <ComplianceBadge
                                 status={supplier.compliance_status}
@@ -281,7 +294,10 @@ export default function SupplierDetail() {
                     <Card className="gap-0 py-0 shadow-none">
                         <CardHeader className="px-6 py-4 gap-0">
                             <CardTitle className="text-base font-semibold flex items-center gap-2">
-                                <Building2 size={16} className="text-primary-600" />
+                                <Building2
+                                    size={16}
+                                    className="text-primary-600"
+                                />
                                 Informations fournisseur
                                 {editing && (
                                     <span className="text-xs font-normal text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full ml-auto">
@@ -308,6 +324,7 @@ export default function SupplierDetail() {
                                     onChange={setField("siret")}
                                     editing={editing}
                                     placeholder="14 chiffres"
+                                    readOnly
                                 />
                                 <Field
                                     label="N° TVA"
@@ -347,6 +364,7 @@ export default function SupplierDetail() {
                                         editValue={editForm.notes}
                                         onChange={setField("notes")}
                                         editing={editing}
+                                        multiline
                                     />
                                 </div>
                             </div>
@@ -360,10 +378,8 @@ export default function SupplierDetail() {
                                     Documents
                                 </CardTitle>
                                 {canUpload && (
-                                    <Button variant="outline" asChild>
-                                        <Link
-                                            to={`/upload?supplier=${id}`}
-                                        >
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link to={`/upload?supplier=${id}`}>
                                             <Plus />
                                             Ajouter
                                         </Link>
@@ -372,24 +388,34 @@ export default function SupplierDetail() {
                             </div>
                         </CardHeader>
                         {docs.length === 0 ? (
-                             <CardContent className="px-6 py-4 border-t">
-                                <FileText
-                                    size={36}
-                                    className="mx-auto text-gray-300 mb-3"
-                                />
-                                <p className="text-sm text-gray-400">
-                                    Aucun document importé
-                                </p>
-                                {canUpload && (
-                                    <Button asChild>
-                                        <Link to={`/upload?supplier=${id}`}>
-                                            <Upload /> Importer
-                                        </Link>
-                                    </Button>
-                                )}
+                            <CardContent className="px-6 py-4 border-t">
+                                <Empty>
+                                    <EmptyHeader>
+                                        <EmptyMedia variant="icon">
+                                            <FileText />
+                                        </EmptyMedia>
+                                        <EmptyTitle>
+                                            Aucun document trouvé
+                                        </EmptyTitle>
+                                        <EmptyDescription>
+                                            Commencez par importer des documents
+                                            pour les voir ici.
+                                        </EmptyDescription>
+                                    </EmptyHeader>
+                                    {canUpload && (
+                                        <EmptyContent className="flex-row justify-center gap-2">
+                                            <Button size="sm" asChild>
+                                                <Link to={`/upload?supplier=${id}`}>
+                                                    <Upload size={16} />
+                                                    Importer
+                                                </Link>
+                                            </Button>
+                                        </EmptyContent>
+                                    )}
+                                </Empty>
                             </CardContent>
                         ) : (
-                             <CardContent className="px-6 py-4 border-t">
+                            <CardContent className="px-6 py-4 border-t">
                                 <div className="divide-y divide-gray-50">
                                     {docs.map((doc) => (
                                         <div
@@ -403,16 +429,22 @@ export default function SupplierDetail() {
                                             >
                                                 {doc.original_filename}
                                             </Link>
-                                            <DocStatusBadge status={doc.status} />
+                                            <DocStatusBadge
+                                                status={doc.status}
+                                            />
                                             <span className="text-xs text-gray-400 whitespace-nowrap hidden lg:block">
                                                 {format(
-                                                    new Date(doc.upload_timestamp),
+                                                    new Date(
+                                                        doc.upload_timestamp,
+                                                    ),
                                                     "dd/MM/yyyy",
                                                 )}
                                             </span>
                                             {doc.status === "error" &&
                                                 canReprocess && (
-                                                    <Button variant="secondary" size="icon"
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="icon"
                                                         onClick={() =>
                                                             reprocessMutation.mutate(
                                                                 doc.document_id,
@@ -467,7 +499,10 @@ export default function SupplierDetail() {
                         <Card className="gap-0 py-0 shadow-none">
                             <CardHeader className="px-6 py-4 gap-0">
                                 <CardTitle className="text-base font-semibold flex items-center gap-2">
-                                    <Wand2 size={16} className="text-primary-600" />
+                                    <Wand2
+                                        size={16}
+                                        className="text-primary-600"
+                                    />
                                     Données extraites
                                 </CardTitle>
                             </CardHeader>
@@ -500,11 +535,12 @@ export default function SupplierDetail() {
                                 {!supplier.siret &&
                                     !supplier.tva_number &&
                                     canEditSupplier && (
-                                        <Button variant="outline"
+                                        <Button
+                                            variant="outline"
                                             onClick={handleAutoFill}
                                         >
-                                            <Wand2 size={12} /> Remplir depuis les
-                                            documents
+                                            <Wand2 size={12} /> Remplir depuis
+                                            les documents
                                         </Button>
                                     )}
                             </CardContent>
@@ -513,11 +549,14 @@ export default function SupplierDetail() {
                     <Card className="gap-0 py-0 shadow-none">
                         <CardHeader className="px-6 py-4 gap-0">
                             <CardTitle className="text-base font-semibold flex items-center gap-2">
-                                <Database size={16} className="text-primary-600" />
+                                <Database
+                                    size={16}
+                                    className="text-primary-600"
+                                />
                                 Métadonnées
                             </CardTitle>
                         </CardHeader>
-                         <CardContent className="px-6 py-4 border-t">
+                        <CardContent className="px-6 py-4 border-t">
                             <div className="space-y-2 text-xs text-gray-500">
                                 <div>
                                     <span className="block text-gray-400">

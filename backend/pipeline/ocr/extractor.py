@@ -12,25 +12,20 @@ Retourne un OCRResult avec le texte, un score de confiance, et des métadonnées
 
 import io
 import re
-import tempfile
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List, Tuple
-from pathlib import Path
 
 import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
 
-from pipeline.ocr.preprocessor import preprocess_from_bytes, image_to_bytes, preprocess_image
+from pipeline.ocr.preprocessor import preprocess_image
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ─────────────────────────────────────────────────────────────
 # CONFIG TESSERACT
-# ─────────────────────────────────────────────────────────────
 
 # Configurations Tesseract à essayer (PSM = Page Segmentation Mode)
 TESSERACT_CONFIGS = [
@@ -55,16 +50,13 @@ MIN_WORD_CONFIDENCE = 40
 NATIVE_PDF_MIN_CHARS = 50
 
 # En-dessous de ce seuil, on abandonne Tesseract et on bascule sur TrOCR
-TROCR_FALLBACK_THRESHOLD = 0.4
+TROCR_FALLBACK_THRESHOLD = 0
 
 # Modèle TrOCR à utiliser (base = ~400MB, large = ~1.3GB)
 TROCR_MODEL_NAME = "microsoft/trocr-base-printed"
 
 
-# ─────────────────────────────────────────────────────────────
 # DATA CLASSES
-# ─────────────────────────────────────────────────────────────
-
 @dataclass
 class OCRResult:
     text: str                          # Texte extrait complet
@@ -81,10 +73,7 @@ class OCRResult:
         """Vrai si le texte extrait est exploitable."""
         return len(self.text.strip()) > 20 and self.confidence > 0.2
 
-
-# ─────────────────────────────────────────────────────────────
 # EXTRACTION TEXTE NATIF PDF
-# ─────────────────────────────────────────────────────────────
 
 def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
     """
@@ -108,10 +97,7 @@ def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
         logger.debug("native_pdf_extraction_failed", error=str(e))
     return None
 
-
-# ─────────────────────────────────────────────────────────────
 # CONVERSION PDF → IMAGES
-# ─────────────────────────────────────────────────────────────
 
 def _pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> List[np.ndarray]:
     """
@@ -132,10 +118,7 @@ def _pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> List[np.ndarray]:
         logger.error("pdf_to_images_failed", error=str(e))
         return []
 
-
-# ─────────────────────────────────────────────────────────────
 # OCR TESSERACT — UNE IMAGE
-# ─────────────────────────────────────────────────────────────
 
 def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
     """
@@ -199,10 +182,7 @@ def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
 
     return best_text, best_conf, best_config
 
-
-# ─────────────────────────────────────────────────────────────
 # NETTOYAGE TEXTE OCR
-# ─────────────────────────────────────────────────────────────
 
 def _clean_ocr_text(text: str) -> str:
     """
@@ -241,9 +221,7 @@ def _clean_ocr_text(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
-# ─────────────────────────────────────────────────────────────
 # TROCR FALLBACK
-# ─────────────────────────────────────────────────────────────
 
 _trocr_processor = None
 _trocr_model = None
@@ -291,9 +269,7 @@ def _trocr_ocr(pil_img: Image.Image) -> Tuple[str, float]:
         return "", 0.0
 
 
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 def extract_text(file_bytes: bytes, mime_type: str) -> OCRResult:
     """

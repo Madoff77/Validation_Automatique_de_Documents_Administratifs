@@ -37,8 +37,6 @@ try:
     from generator import (
         fetch_sirene_companies,
         _siren_to_tva,
-        _gen_iban,
-        _gen_bic,
         generate_text,
         _text_to_pdf,
         text_to_image,
@@ -62,9 +60,9 @@ USERS = [
 # Les anomalies sont attribuées à certains fournisseurs selon leur index.
 DOC_SCHEMAS = [
     ("FACTURE", None,       "high_quality",   0.1),
-    ("FACTURE", None,       "combined",       0.6),
+    # ("FACTURE", None,       "combined",       0.6),
     ("DEVIS",   None,       "noise",          0.3),
-    ("KBIS",    None,       "rotation",       0.2),
+    # ("KBIS",    None,       "rotation",       0.2),
     ("URSSAF",  None,       "high_quality",   0.1),
     ("RIB",     None,       "high_quality",   0.1),
 ]
@@ -72,10 +70,10 @@ DOC_SCHEMAS = [
 # Schéma alternatif avec anomalies (pour 1 fournisseur sur 3)
 DOC_SCHEMAS_WITH_ANOMALIES = [
     ("FACTURE", "bad_siret", "blur",           0.4),
-    ("DEVIS",   None,        "noise",          0.3),
+    # ("DEVIS",   None,        "noise",          0.3),
     ("KBIS",    "expired",   "low_resolution", 0.6),
     ("URSSAF",  "expired",   "blur",           0.5),
-    ("SIRET",   "bad_siret", "combined",       0.5),
+    # ("SIRET",   "bad_siret", "combined",       0.5),
     ("RIB",     None,        "high_quality",   0.1),
 ]
 
@@ -289,7 +287,7 @@ def _count_dag_states(run_ids: set[str]) -> dict[str, int]:
 async def run_pipeline_on_seeds(db, document_ids: list):
     print(f"\n── Pipeline Airflow sur {len(document_ids)} documents ──────────────")
 
-    # ── Vérifier qu'Airflow est disponible ───────────────────
+    # Vérifier qu'Airflow est disponible
     print("  Vérification Airflow...", end=" ", flush=True)
     if not _airflow_ready():
         print("✗ Airflow non disponible")
@@ -298,7 +296,7 @@ async def run_pipeline_on_seeds(db, document_ids: list):
         return
     print("✓")
 
-    # ── Déclencher un DAG run par document ───────────────────
+    # Déclencher un DAG run par document
     print(f"  Déclenchement de {len(document_ids)} DAG runs...")
     run_ids: set[str] = set()
 
@@ -372,7 +370,7 @@ async def main():
 
     # Récupérer les entreprises depuis l'API SIRENE
     print("\nRécupération des entreprises depuis l'API SIRENE...")
-    real_companies = fetch_sirene_companies(n_companies=15)
+    real_companies = fetch_sirene_companies(n_companies=3)
     if not real_companies:
         print("  [ERR] Impossible de récupérer les données SIRENE. Vérifiez INSEE_API_KEY.")
         return

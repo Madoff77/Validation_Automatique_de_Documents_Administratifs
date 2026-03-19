@@ -26,6 +26,14 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+    EmptyContent,
+} from "@/components/ui/empty";
 
 function StatCard({ icon: Icon, label, value, sub, color = "blue", loading }) {
     const colors = {
@@ -87,7 +95,7 @@ export default function Dashboard() {
                         Vue d'ensemble de la plateforme
                     </p>
                 </div>
-                {canUpload && (
+                {canUpload || recentDocs?.length > 0 ? null : (
                     <Button asChild>
                         <Link
                             to="/upload"
@@ -189,100 +197,110 @@ export default function Dashboard() {
                             <Link to="/documents">Voir tout</Link>
                         </Button>
                     </div>
-                    <Card className="shadow-none gap-0 p-0">
-                        <CardContent className="p-0">
-                            <Table className="px-6">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Nom</TableHead>
-                                        <TableHead>Statut</TableHead>
-                                        <TableHead className="text-right">
-                                            Importé
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {loadingDocs ? (
-                                        Array.from({ length: 5 }).map(
-                                            (_, i) => (
-                                                <TableRow
-                                                    key={i}
-                                                    className="animate-pulse"
-                                                >
+                    {recentDocs?.length === 0 ? (
+                        <Card className="shadow-none p-0">
+                            <Empty>
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <FileText />
+                                    </EmptyMedia>
+                                    <EmptyTitle>
+                                        Aucun document trouvé
+                                    </EmptyTitle>
+                                    <EmptyDescription>
+                                        Commencez par importer des documents pour les voir ici.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                                <EmptyContent className="flex-row justify-center gap-2">
+                                    <Button size="sm" asChild>
+                                        <Link to="/upload">
+                                            <Upload size={16} />
+                                            Importer
+                                        </Link>
+                                    </Button>
+                                </EmptyContent>
+                            </Empty>
+                        </Card>
+                    ) : (
+                        <Card className="shadow-none gap-0 p-0">
+                            <CardContent className="p-0">
+                                <Table className="px-6">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Nom</TableHead>
+                                            <TableHead>Statut</TableHead>
+                                            <TableHead className="text-right">
+                                                Importé
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {loadingDocs ? (
+                                            Array.from({ length: 5 }).map(
+                                                (_, i) => (
+                                                    <TableRow
+                                                        key={i}
+                                                        className="animate-pulse"
+                                                    >
+                                                        <TableCell>
+                                                            <div className="h-6 w-20 bg-gray-200 rounded" />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="h-4 w-56 bg-gray-200 rounded" />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="h-6 w-24 bg-gray-200 rounded" />
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="h-4 w-20 bg-gray-200 rounded ml-auto" />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ),
+                                            )
+                                        ) : (
+                                            recentDocs?.map((doc) => (
+                                                <TableRow key={doc.document_id}>
                                                     <TableCell>
-                                                        <div className="h-6 w-20 bg-gray-200 rounded" />
+                                                        <DocTypeBadge
+                                                            type={doc.doc_type}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[320px]">
+                                                        <Link
+                                                            to={`/documents/${doc.document_id}`}
+                                                            className="text-sm text-gray-700 hover:underline truncate block"
+                                                            title={
+                                                                doc.original_filename
+                                                            }
+                                                        >
+                                                            {doc.original_filename}
+                                                        </Link>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="h-4 w-56 bg-gray-200 rounded" />
+                                                        <DocStatusBadge
+                                                            status={doc.status}
+                                                        />
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <div className="h-6 w-24 bg-gray-200 rounded" />
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="h-4 w-20 bg-gray-200 rounded ml-auto" />
+                                                    <TableCell className="text-right text-xs text-gray-400">
+                                                        {formatDistanceToNow(
+                                                            new Date(
+                                                                doc.upload_timestamp,
+                                                            ),
+                                                            {
+                                                                addSuffix: true,
+                                                                locale: fr,
+                                                            },
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
-                                            ),
-                                        )
-                                    ) : recentDocs?.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell
-                                                colSpan={4}
-                                                className="py-10 text-center text-gray-400"
-                                            >
-                                                <div className="flex items-center justify-center gap-3">
-                                                    <span>Aucun document.</span>
-                                                    <Button size="sm" asChild>
-                                                        <Link to="/upload">
-                                                            Importer
-                                                        </Link>
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        recentDocs?.map((doc) => (
-                                            <TableRow key={doc.document_id}>
-                                                <TableCell>
-                                                    <DocTypeBadge
-                                                        type={doc.doc_type}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="max-w-[320px]">
-                                                    <Link
-                                                        to={`/documents/${doc.document_id}`}
-                                                        className="text-sm text-gray-700 hover:underline truncate block"
-                                                        title={
-                                                            doc.original_filename
-                                                        }
-                                                    >
-                                                        {doc.original_filename}
-                                                    </Link>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <DocStatusBadge
-                                                        status={doc.status}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="text-right text-xs text-gray-400">
-                                                    {formatDistanceToNow(
-                                                        new Date(
-                                                            doc.upload_timestamp,
-                                                        ),
-                                                        {
-                                                            addSuffix: true,
-                                                            locale: fr,
-                                                        },
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             </div>
         </div>

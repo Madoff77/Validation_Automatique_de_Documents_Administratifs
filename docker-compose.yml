@@ -5,8 +5,6 @@ x-airflow-common: &airflow-common
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-    # Clé Fernet valide 32 bytes (base64url 44 chars). Override via AIRFLOW_FERNET_KEY dans .env
-    # Ne pas utiliser ${VAR:-default=} avec "=" dans le default — Docker Compose tronque la valeur
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -39,9 +37,7 @@ x-airflow-common: &airflow-common
     - docnet
 
 services:
-  # ─────────────────────────────────────────────────────────────
   # DATABASES
-  # ─────────────────────────────────────────────────────────────
   mongo:
     image: mongo:7.0
     container_name: docplatform-mongo
@@ -107,9 +103,7 @@ services:
     networks:
       - docnet
 
-  # ─────────────────────────────────────────────────────────────
   # OBJECT STORAGE (Data Lake S3-compatible)
-  # ─────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:RELEASE.2024-01-16T16-07-38Z
     container_name: docplatform-minio
@@ -153,9 +147,7 @@ services:
     networks:
       - docnet
 
-  # ─────────────────────────────────────────────────────────────
   # AIRFLOW
-  # ─────────────────────────────────────────────────────────────
   airflow-init:
     <<: *airflow-common
     container_name: docplatform-airflow-init
@@ -208,9 +200,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # ─────────────────────────────────────────────────────────────
   # BACKEND API
-  # ─────────────────────────────────────────────────────────────
   backend-api:
     build:
       context: ./backend
@@ -242,7 +232,7 @@ services:
       - ./scripts:/app/scripts
       - ./data-generator:/app/data-generator
       - model_data:/app/models/trained
-      - hf_model_cache:/root/.cache/huggingface
+      # - hf_model_cache:/root/.cache/huggingface
     depends_on:
       mongo:
         condition: service_healthy
@@ -257,9 +247,7 @@ services:
     networks:
       - docnet
 
-  # ─────────────────────────────────────────────────────────────
   # FRONTENDS
-  # ─────────────────────────────────────────────────────────────
   frontend-crm:
     build:
       context: ./frontend-crm
@@ -292,15 +280,13 @@ services:
     networks:
       - docnet
 
-# ─────────────────────────────────────────────────────────────
 # VOLUMES & NETWORKS
-# ─────────────────────────────────────────────────────────────
 volumes:
   mongo_data:
   postgres_data:
   minio_data:
   model_data:
-  hf_model_cache:
+  # hf_model_cache:
 
 networks:
   docnet:

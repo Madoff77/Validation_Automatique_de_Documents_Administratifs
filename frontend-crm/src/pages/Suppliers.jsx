@@ -226,52 +226,43 @@ export default function Suppliers() {
                         {isLoading ? (
                             Array.from({ length: 5 }).map((_, i) => (
                                 <TableRow key={i} className="animate-pulse">
-                                    {Array.from({ length: 4 }).map(
-                                        (
-                                            _,
-                                            j,
-                                        ) => (
-                                            <TableCell key={j}>
-                                                <div className="h-4 bg-background rounded-sm w-3/4" />
-                                            </TableCell>
-                                        ),
-                                    )}
+                                    {Array.from({ length: 4 }).map((_, j) => (
+                                        <TableCell key={j}>
+                                            <div className="h-4 bg-background rounded-sm w-3/4" />
+                                        </TableCell>
+                                    ))}
                                 </TableRow>
                             ))
                         ) : suppliers.length === 0 ? (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={4}
-                                    className="py-10 text-center text-gray-400"
-                                >
-                                    <Building2
-                                        size={36}
-                                        className="mx-auto mb-3 text-gray-300"
-                                    />
-                                    <p className="font-medium text-gray-700 mb-1">
+                            <Empty>
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <Building2 />
+                                    </EmptyMedia>
+                                    <EmptyTitle>
                                         Aucun fournisseur trouvé
-                                    </p>
-                                    <p className="text-sm mb-4">
+                                    </EmptyTitle>
+                                    <EmptyDescription>
                                         Vous n'avez pas encore créé de
                                         fournisseur.
-                                    </p>
-                                    <div className="flex justify-center">
-                                        {canCreateSupplier ? (
+                                    </EmptyDescription>
+                                    <EmptyContent className="flex-row justify-center gap-2">
+                                        {canCreateSupplier && (
                                             <CreateSupplierDialog
                                                 canCreateSupplier={
                                                     canCreateSupplier
                                                 }
                                                 trigger={
                                                     <Button>
-                                                        <Plus size={16} />{" "}
+                                                        <Plus size={16} />
                                                         Ajouter un fournisseur
                                                     </Button>
                                                 }
                                             />
-                                        ) : null}
-                                    </div>
-                                </TableCell>
-                            </TableRow>
+                                        )}
+                                    </EmptyContent>
+                                </EmptyHeader>
+                            </Empty>
                         ) : (
                             suppliers.map((s) => (
                                 <TableRow key={s.supplier_id}>
