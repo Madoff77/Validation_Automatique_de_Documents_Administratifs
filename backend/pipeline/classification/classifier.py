@@ -27,9 +27,7 @@ logger = get_logger(__name__)
 
 DOC_TYPES = ["FACTURE", "DEVIS", "SIRET", "URSSAF", "KBIS", "RIB"]
 
-# ─────────────────────────────────────────────────────────────
 # CLASSIFIEUR PAR RÈGLES (fallback sans modèle ML)
-# ─────────────────────────────────────────────────────────────
 
 # Mots-clés discriminants par classe, avec poids relatifs
 KEYWORD_RULES: Dict[str, List[Tuple[str, float]]] = {
@@ -108,9 +106,7 @@ def classify_by_keywords(text: str) -> Tuple[str, float, Dict[str, float]]:
     return best, confidence, probs
 
 
-# ─────────────────────────────────────────────────────────────
 # CLASSIFIEUR ML (TF-IDF + Random Forest)
-# ─────────────────────────────────────────────────────────────
 
 class DocumentClassifier:
     """
@@ -176,7 +172,7 @@ class DocumentClassifier:
         # Préprocesser le texte
         clean_text = self._preprocess(text)
 
-        # ── Prédiction ML ─────────────────────────────────────
+        # Prédiction ML
         if self._is_loaded and self._model and self._vectorizer:
             try:
                 X = self._vectorizer.transform([clean_text])
@@ -205,7 +201,7 @@ class DocumentClassifier:
             except Exception as e:
                 logger.warning("classify_ml_failed", error=str(e))
 
-        # ── Fallback keyword ───────────────────────────────────
+        # Fallback keyword
         kw_type, kw_conf, kw_probs = classify_by_keywords(text)
         logger.debug("classify_keyword", doc_type=kw_type, confidence=round(kw_conf, 3))
         return kw_type, kw_conf, kw_probs
@@ -269,9 +265,7 @@ class DocumentClassifier:
         return self._is_loaded
 
 
-# ─────────────────────────────────────────────────────────────
 # SINGLETON (chargé une seule fois en mémoire)
-# ─────────────────────────────────────────────────────────────
 
 _instance: Optional[DocumentClassifier] = None
 

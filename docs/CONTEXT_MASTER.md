@@ -328,19 +328,19 @@ Airflow DAG: document_pipeline
 
 ## 9. PLAN D'IMPLÉMENTATION
 
-### Phase 1 — Cadrage & Documentation ✅
+### Phase 1 — Cadrage & Documentation
 - Architecture définie
 - CONTEXT_MASTER.md créé
 - CHANGELOG_IMPLEMENTATION.md créé
 
-### Phase 2 — Socle Technique ✅
+### Phase 2 — Socle Technique
 - docker-compose.yml (tous services)
 - .env.example
 - Backend FastAPI skeleton
 - MongoDB + MinIO clients
 - Healthchecks
 
-### Adaptations setup machine (2026-03-16) ✅
+### Adaptations setup machine (2026-03-16)
 - `version: "3.9"` supprimé du docker-compose (Docker Compose v2 ne l'exige plus)
 - Healthcheck MinIO désactivé (image sans `curl`) → `minio-init` en dépendance simple
 - Healthchecks `backend-api` et `airflow-webserver` : `curl` → `python urllib.request` (curl absent de python:3.11-slim)

@@ -15,8 +15,8 @@ from pipeline.validation.validator import (
 
 
 def _assert(condition: bool, message: str):
-    status = "✅" if condition else "❌"
-    print(f"  {status} {message}")
+    status = "OK" if condition else "KO"
+    print(f"  {status}  {message}")
     if not condition:
         raise AssertionError(f"FAIL: {message}")
 
@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     print(f"\n{'═'*45}")
     if failures == 0:
-        print("✅ Tous les tests de validation passent")
+        print("OK — Tous les tests de validation passent")
     else:
-        print(f"❌ {failures} test(s) en échec")
+        print(f"KO — {failures} test(s) en échec")
     print('═'*45)

@@ -13,9 +13,9 @@ RED='\033[0;31m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-step() { echo -e "\n${BOLD}${CYAN}▶ $1${RESET}"; }
-ok()   { echo -e "  ${GREEN}✓ $1${RESET}"; }
-warn() { echo -e "  ${YELLOW}⚠ $1${RESET}"; }
+step() { echo -e "\n${BOLD}${CYAN}>> $1${RESET}"; }
+ok()   { echo -e "  ${GREEN}[OK] $1${RESET}"; }
+warn() { echo -e "  ${YELLOW}[WARN] $1${RESET}"; }
 info() { echo -e "  ${CYAN}→ $1${RESET}"; }
 
 # ===========================================================================
@@ -158,8 +158,8 @@ for a in anomalies:
     s = a.get('severity','?')
     by_severity[s] = by_severity.get(s, 0) + 1
 for sev, count in sorted(by_severity.items()):
-    icon = '🔴' if sev=='error' else '🟡' if sev=='warning' else '🔵'
-    print(f'  {sev}: {count}')
+    tag = '[ERR]' if sev == 'error' else '[WARN]' if sev == 'warning' else '[INFO]'
+    print(f'  {tag} {sev}: {count}')
 " 2>/dev/null || true
 
 # Afficher les 3 premières

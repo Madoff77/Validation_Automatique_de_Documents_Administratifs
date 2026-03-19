@@ -40,9 +40,7 @@ try:
 except Exception as _log_err:
     print(f"[DAG] structlog config skipped: {_log_err}")
 
-# ─────────────────────────────────────────────────────────────
 # DEFAULTS
-# ─────────────────────────────────────────────────────────────
 
 DEFAULT_ARGS = {
     "owner": "docplatform",
@@ -57,9 +55,7 @@ DEFAULT_ARGS = {
 }
 
 
-# ─────────────────────────────────────────────────────────────
 # FONCTIONS WRAPPER (appelées par PythonOperator)
-# ─────────────────────────────────────────────────────────────
 
 def _get_document_id(context: dict) -> str:
     """
@@ -77,7 +73,7 @@ def _get_document_id(context: dict) -> str:
         print(f"[DAG] document_id fourni via conf : {document_id}")
         return document_id
 
-    # ── Fallback développement ────────────────────────────────
+    # Fallback développement
     print("[DAG] Aucun document_id dans conf — fallback dev : recherche dans MongoDB")
     try:
         import pymongo
@@ -189,9 +185,7 @@ def fn_finalize(**context):
     return result
 
 
-# ─────────────────────────────────────────────────────────────
 # CALLBACKS
-# ─────────────────────────────────────────────────────────────
 
 def on_failure_callback(context):
     """Marquer le document en erreur dans MongoDB si le DAG échoue."""
@@ -222,9 +216,7 @@ def on_failure_callback(context):
         print(f"on_failure_callback error: {e}")
 
 
-# ─────────────────────────────────────────────────────────────
 # DAG DEFINITION
-# ─────────────────────────────────────────────────────────────
 
 with DAG(
     dag_id="document_pipeline",

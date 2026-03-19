@@ -28,9 +28,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ─────────────────────────────────────────────────────────────
 # CONFIG TESSERACT
-# ─────────────────────────────────────────────────────────────
 
 # Configurations Tesseract à essayer (PSM = Page Segmentation Mode)
 TESSERACT_CONFIGS = [
@@ -50,9 +48,7 @@ MIN_WORD_CONFIDENCE = 20
 NATIVE_PDF_MIN_CHARS = 50
 
 
-# ─────────────────────────────────────────────────────────────
 # DATA CLASSES
-# ─────────────────────────────────────────────────────────────
 
 @dataclass
 class OCRResult:
@@ -71,9 +67,7 @@ class OCRResult:
         return len(self.text.strip()) > 20 and self.confidence > 0.2
 
 
-# ─────────────────────────────────────────────────────────────
 # EXTRACTION TEXTE NATIF PDF
-# ─────────────────────────────────────────────────────────────
 
 def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
     """
@@ -98,9 +92,7 @@ def _extract_native_pdf(pdf_bytes: bytes) -> Optional[str]:
     return None
 
 
-# ─────────────────────────────────────────────────────────────
 # CONVERSION PDF → IMAGES
-# ─────────────────────────────────────────────────────────────
 
 def _pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> List[np.ndarray]:
     """
@@ -122,9 +114,7 @@ def _pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> List[np.ndarray]:
         return []
 
 
-# ─────────────────────────────────────────────────────────────
 # OCR TESSERACT — UNE IMAGE
-# ─────────────────────────────────────────────────────────────
 
 def _tesseract_single(pil_img: Image.Image, config: str) -> Tuple[str, float]:
     """
@@ -189,9 +179,7 @@ def _best_tesseract_pass(np_img: np.ndarray) -> Tuple[str, float, str]:
     return best_text, best_conf, best_config
 
 
-# ─────────────────────────────────────────────────────────────
 # NETTOYAGE TEXTE OCR
-# ─────────────────────────────────────────────────────────────
 
 def _clean_ocr_text(text: str) -> str:
     """
@@ -230,9 +218,7 @@ def _clean_ocr_text(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 def extract_text(file_bytes: bytes, mime_type: str) -> OCRResult:
     """

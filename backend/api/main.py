@@ -42,9 +42,7 @@ configure_logging()
 logger = get_logger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────
 # LIFESPAN (startup / shutdown)
-# ─────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -94,9 +92,7 @@ async def _ensure_default_admin():
     logger.info("default_admin_created", username="admin")
 
 
-# ─────────────────────────────────────────────────────────────
 # APP
-# ─────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title=settings.app_name,
@@ -108,7 +104,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middlewares ────────────────────────────────────────────────
+# Middlewares
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -136,7 +132,7 @@ async def log_requests(request, call_next):
     return response
 
 
-# ── Routes ─────────────────────────────────────────────────────
+# Routes
 
 app.include_router(auth.router)
 app.include_router(documents.router)

@@ -7,7 +7,7 @@ const DOC_STATUS = {
   classified:    { label: 'Classifié',    cls: 'bg-purple-100 text-purple-700' },
   extracted:     { label: 'Extrait',      cls: 'bg-cyan-100 text-cyan-700' },
   validated:     { label: 'Validé',       cls: 'bg-teal-100 text-teal-700' },
-  processed:     { label: 'Traité ✓',    cls: 'bg-green-100 text-green-700' },
+  processed:     { label: 'Traité',    cls: 'bg-green-100 text-green-700' },
   error:         { label: 'Erreur',       cls: 'bg-red-100 text-red-700' },
 }
 
