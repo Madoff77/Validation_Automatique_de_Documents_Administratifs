@@ -69,16 +69,13 @@ DOC_FILE="/tmp/demo_facture_$(date +%s).pdf"
 python3 -c "
 import sys
 sys.path.insert(0, '/app/data-generator')
-from generator import generate_demo_documents
-import os
-docs = generate_demo_documents()
-# Prendre la première facture
-for name, content, mime in docs:
-    if 'facture' in name.lower():
-        with open('$DOC_FILE', 'wb') as f:
-            f.write(content)
-        print(f'Fichier: {name} ({len(content)} bytes)')
-        break
+from generator import generate_text, _text_to_pdf
+text = generate_text('FACTURE')
+pdf_bytes = _text_to_pdf(text, title='FACTURE')
+if pdf_bytes:
+    with open('$DOC_FILE', 'wb') as f:
+        f.write(pdf_bytes)
+    print(f'Fichier généré ({len(pdf_bytes)} bytes)')
 " 2>/dev/null || {
   # Fallback: créer un PDF minimal
   python3 -c "

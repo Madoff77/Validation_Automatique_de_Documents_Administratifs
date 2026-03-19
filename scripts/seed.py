@@ -3,20 +3,20 @@ Script de seed — données de démonstration complètes.
 
 Ce script :
   1. Crée les utilisateurs admin/operator/viewer
-  2. Crée 3 fournisseurs fictifs cohérents
-  3. Upload des documents demo avec anomalies volontaires
+  2. Crée des fournisseurs depuis l'API SIRENE (données réelles)
+  3. Génère plusieurs documents par fournisseur (FACTURE, KBIS, URSSAF, RIB, DEVIS, SIRET)
   4. Lance le pipeline sur chaque document
 
 Usage : python scripts/seed.py
-  Ou via Docker : docker compose exec backend-api python /app/scripts/seed.py
+  Ou via Docker : docker compose exec backend-api sh -c "python /app/scripts/seed.py"
 """
 
 import sys
 import os
 import asyncio
 import uuid
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+import random
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -34,12 +34,14 @@ try:
     sys.path.insert(0, "/app/data-generator")
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../data-generator"))
     from generator import (
-        fetch_sirene_companies, 
-        _siren_to_tva, 
-        generate_text, 
-        _text_to_pdf, 
-        text_to_image, 
-        degrade_image
+        fetch_sirene_companies,
+        _siren_to_tva,
+        _gen_iban,
+        _gen_bic,
+        generate_text,
+        _text_to_pdf,
+        text_to_image,
+        degrade_image,
     )
     import cv2
     has_generator = True
@@ -47,9 +49,6 @@ except ImportError as e:
     has_generator = False
     logger.warning(f"Générateur de données non disponible : {e}.")
 
-# ─────────────────────────────────────────────────────────────
-# DONNÉES DEMO FIXÉES (reproducible)
-# ─────────────────────────────────────────────────────────────
 
 USERS = [
     {"username": "admin",    "email": "admin@docplatform.local",    "role": "admin",    "password": "admin123",    "full_name": "Admin Système"},
@@ -57,37 +56,26 @@ USERS = [
     {"username": "viewer",   "email": "viewer@docplatform.local",   "role": "viewer",   "password": "viewer123",   "full_name": "Jean Martin"},
 ]
 
-SUPPLIERS = [
-    {
-        "supplier_id": "sup-001-btp",
-        "name": "BTP SOLUTIONS SAS",
-        "siret": "73282932000074",
-        "siren": "732829320",
-        "tva_number": "FR58732829320",
-        "address": "15 rue du Bâtiment, 75015 Paris",
-        "email": "contact@btp-solutions.fr",
-        "phone": "01 23 45 67 89",
-    },
-    {
-        "supplier_id": "sup-002-tech",
-        "name": "TECHNO SERVICES EURL",
-        "siret": "41816609600069",
-        "siren": "418166096",
-        "tva_number": "FR22418166096",
-        "address": "8 avenue de l'Innovation, 69003 Lyon",
-        "email": "admin@techno-services.fr",
-        "phone": "04 56 78 90 12",
-    },
-    {
-        "supplier_id": "sup-003-consult",
-        "name": "CONSEIL & CO SARL",
-        "siret": "55208131766522",
-        "siren": "552081317",
-        "tva_number": "FR33552081317",
-        "address": "22 boulevard des Affaires, 33000 Bordeaux",
-        "email": "direction@conseil-co.fr",
-        "phone": "05 67 89 01 23",
-    },
+# Schéma de documents à générer par fournisseur.
+# Format : (doc_type, anomaly, degradation, severity)
+# Les anomalies sont attribuées à certains fournisseurs selon leur index.
+DOC_SCHEMAS = [
+    ("FACTURE", None,       "high_quality",   0.1),
+    ("FACTURE", None,       "combined",       0.6),
+    ("DEVIS",   None,       "noise",          0.3),
+    ("KBIS",    None,       "rotation",       0.2),
+    ("URSSAF",  None,       "high_quality",   0.1),
+    ("RIB",     None,       "high_quality",   0.1),
+]
+
+# Schéma alternatif avec anomalies (pour 1 fournisseur sur 3)
+DOC_SCHEMAS_WITH_ANOMALIES = [
+    ("FACTURE", "bad_siret", "blur",           0.4),
+    ("DEVIS",   None,        "noise",          0.3),
+    ("KBIS",    "expired",   "low_resolution", 0.6),
+    ("URSSAF",  "expired",   "blur",           0.5),
+    ("SIRET",   "bad_siret", "combined",       0.5),
+    ("RIB",     None,        "high_quality",   0.1),
 ]
 
 
@@ -110,99 +98,80 @@ async def seed_users(db):
             "created_at": now,
             "updated_at": now,
         })
-        print(f"  ✓ {u['username']} ({u['role']}) — mot de passe: {u['password']}")
+        print(f"  ✓ {u['username']} ({u['role']})")
 
-async def seed_suppliers(db, real_companies):
-    print("\n── Fournisseurs ──────────────────────────────")
-    global SUPPLIERS
-    
-    for i, real_c in enumerate(real_companies):
-        if i < len(SUPPLIERS):
-            SUPPLIERS[i]["name"] = real_c["name"]
-            SUPPLIERS[i]["siret"] = real_c["siret"]
-            SUPPLIERS[i]["siren"] = real_c["siren"]
-            SUPPLIERS[i]["tva_number"] = _siren_to_tva(real_c["siren"])
-            SUPPLIERS[i]["address"] = real_c["address"]
 
-    for s in SUPPLIERS:
-        existing = await db.suppliers.find_one({"supplier_id": s["supplier_id"]})
-        if existing:
-            print(f"  ↳ {s['name']} déjà présent")
+async def seed_suppliers(db, real_companies: list) -> list:
+    """Crée un fournisseur par entreprise SIRENE. Retourne la liste des supplier_ids créés ou existants."""
+    print(f"\n── Fournisseurs ({len(real_companies)} entreprises) ────────────")
+    supplier_ids = []
+
+    for i, company in enumerate(real_companies):
+        siren = company.get("siren", "")
+        siret = company.get("siret", "")
+        if not siren or not siret:
             continue
-        
+
+        supplier_id = f"sup-{siret}"
+        supplier_ids.append(supplier_id)
+
+        existing = await db.suppliers.find_one({"supplier_id": supplier_id})
+        if existing:
+            print(f"  ↳ {company['name']} déjà présent")
+            continue
+
         now = datetime.now(timezone.utc)
         await db.suppliers.insert_one({
-            **s,
-            "created_at": now,
-            "updated_at": now,
+            "supplier_id": supplier_id,
+            "name": company["name"],
+            "siret": siret,
+            "siren": siren,
+            "tva_number": _siren_to_tva(siren),
+            "address": company.get("address", ""),
+            "email": f"contact@{siret[:6].lower()}.fr",
+            "phone": "01 00 00 00 00",
             "compliance_status": "pending",
             "notes": "",
+            "created_at": now,
+            "updated_at": now,
         })
-        print(f"  ✓ {s['name']} (SIRET: {s['siret']})")
+        print(f"  ✓ {company['name']} (SIRET: {siret})")
+
+    return supplier_ids
 
 
-async def seed_documents(db):
-    """Créer des documents avec données réalistes et anomalies volontaires."""
-    print("\n── Documents de démonstration ────────────────")
-
-    # Importer le générateur
-    # Chemins possibles selon l'environnement (Docker: /app/data-generator, local: ../data-generator)
-    try:
-        sys.path.insert(0, "/app/data-generator")
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../data-generator"))
-        from generator import generate_text, _text_to_pdf, text_to_image, degrade_image
-        import cv2
-        has_generator = True
-    except ImportError:
-        has_generator = False
-        print("  [WARN] Générateur non disponible, seed textuel seulement")
-
-    # Scénarios de documents à créer
-    scenarios = [
-        # (supplier_id, doc_type, label, anomaly, dégradation, sévérité)
-        ("sup-001-btp",    "FACTURE", "Facture BTP normale",          None,       "high_quality", 0.1),
-        ("sup-001-btp",    "URSSAF",  "URSSAF BTP expirée",           "expired",  "blur",         0.5),
-        ("sup-001-btp",    "KBIS",    "Kbis BTP récent",              None,       "rotation",     0.2),
-        ("sup-001-btp",    "RIB",     "RIB BTP",                      None,       "high_quality", 0.1),
-        ("sup-002-tech",   "FACTURE", "Facture Tech scan dégradé",    None,       "combined",     0.7),
-        ("sup-002-tech",   "DEVIS",   "Devis Tech",                   None,       "noise",        0.3),
-        ("sup-002-tech",   "SIRET",   "Attestation SIRET bad",        "bad_siret","blur",         0.4),
-        ("sup-002-tech",   "URSSAF",  "URSSAF Tech valide",           None,       "high_quality", 0.1),
-        ("sup-003-consult","FACTURE", "Facture Conseil photo mobile", None,       "combined",     0.8),
-        ("sup-003-consult","KBIS",    "Kbis Conseil expiré",          "expired",  "low_resolution",0.6),
-        ("sup-003-consult","RIB",     "RIB Conseil",                  None,       "high_quality", 0.1),
-    ]
-
+async def seed_documents(db, supplier_ids: list) -> list:
+    """Génère des documents pour chaque fournisseur. Retourne les document_ids créés."""
+    print(f"\n── Documents ({len(supplier_ids)} fournisseurs) ──────────────")
     ensure_buckets()
     created = []
 
-    for supplier_id, doc_type, label, anomaly, degradation, severity in scenarios:
-        document_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
+    for idx, supplier_id in enumerate(supplier_ids):
+        # 1 fournisseur sur 3 reçoit des documents avec anomalies
+        schemas = DOC_SCHEMAS_WITH_ANOMALIES if idx % 3 == 2 else DOC_SCHEMAS
 
-        seed_key = f"{supplier_id}:{label.lower().replace(' ', '_')}"
-        existing = await db.documents.find_one({"seed_key": seed_key})
-        if existing:
-            print(f"  ↳ {label} déjà présent")
-            continue
+        for doc_type, anomaly, degradation, severity in schemas:
+            seed_key = f"{supplier_id}:{doc_type}:{anomaly or 'ok'}"
+            existing = await db.documents.find_one({"seed_key": seed_key})
+            if existing:
+                continue
 
-        # Générer le contenu
-        if has_generator:
+            document_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc)
+
+            # Générer le contenu du document
             text = generate_text(doc_type, anomaly=anomaly)
             file_bytes = None
             mime_type = "application/pdf"
             ext = "pdf"
 
-            # 30% PDF natif (facture numérique) / 70% image dégradée (scan/photo)
-            import random as _rnd
-            use_pdf = _rnd.random() < 0.30
-            if use_pdf:
-                pdf_bytes = _text_to_pdf(text, title=f"{doc_type} - {label}")
+            # 30% PDF natif, 70% image dégradée
+            if random.random() < 0.30:
+                pdf_bytes = _text_to_pdf(text, title=f"{doc_type}")
                 if pdf_bytes:
                     file_bytes = pdf_bytes
 
             if not file_bytes:
-                # Image avec dégradation (blur, noise, combined, rotation, high_quality...)
                 import io
                 from PIL import Image as PILImage
                 img = text_to_image(text)
@@ -213,68 +182,61 @@ async def seed_documents(db):
                 file_bytes = buf.getvalue()
                 mime_type = "image/jpeg"
                 ext = "jpg"
-        else:
-            text = f"Document de type {doc_type} pour fournisseur {supplier_id}"
-            file_bytes = text.encode("utf-8")
-            mime_type = "text/plain"
-            ext = "txt"
 
-        if not file_bytes:
-            file_bytes = text.encode("utf-8")
-            mime_type = "text/plain"
-            ext = "txt"
+            filename = f"{document_id}.{ext}"
+            raw_path = f"{supplier_id}/{filename}"
+            upload_file(settings.minio_bucket_raw, raw_path, file_bytes, mime_type)
 
-        filename = f"{document_id}.{ext}"
-        raw_path = f"{supplier_id}/{filename}"
-        upload_file(settings.minio_bucket_raw, raw_path, file_bytes, mime_type)
-
-        doc = {
-            "document_id": document_id,
-            "supplier_id": supplier_id,
-            "seed_key": seed_key,
-            "filename": filename,
-            "original_filename": f"{label.lower().replace(' ', '_')}.{ext}",
-            "mime_type": mime_type,
-            "file_size_bytes": len(file_bytes),
-            "upload_timestamp": now,
-            "status": "pending",
-            "zone": "raw",
-            "minio_raw_path": raw_path,
-            "minio_clean_path": None,
-            "minio_curated_path": None,
-            "doc_type": None,
-            "classification_confidence": None,
-            "ocr_text": text,  # Pré-remplir pour accélérer le seed
-            "ocr_quality_score": 0.9,
-            "extracted": {},
-            "validation": {"status": "pending", "checks": []},
-            "airflow_run_id": None,
-            "processing_duration_ms": None,
-            "error_message": None,
-            "uploaded_by": "seed",
-        }
-        await db.documents.insert_one(doc)
-        print(f"  ✓ {label} ({doc_type}) → document_id={document_id}")
-        created.append(document_id)
+            label = f"{doc_type.lower()}{'_' + anomaly if anomaly else ''}"
+            doc = {
+                "document_id": document_id,
+                "supplier_id": supplier_id,
+                "seed_key": seed_key,
+                "filename": filename,
+                "original_filename": f"{label}.{ext}",
+                "mime_type": mime_type,
+                "file_size_bytes": len(file_bytes),
+                "upload_timestamp": now,
+                "status": "pending",
+                "zone": "raw",
+                "minio_raw_path": raw_path,
+                "minio_clean_path": None,
+                "minio_curated_path": None,
+                "doc_type": None,
+                "classification_confidence": None,
+                "ocr_text": text,
+                "ocr_quality_score": 0.9,
+                "extracted": {},
+                "validation": {"status": "pending", "checks": []},
+                "airflow_run_id": None,
+                "processing_duration_ms": None,
+                "error_message": None,
+                "uploaded_by": "seed",
+            }
+            await db.documents.insert_one(doc)
+            created.append(document_id)
+            anomaly_tag = f" [{anomaly}]" if anomaly else ""
+            print(f"  ✓ {supplier_id[:20]}... — {doc_type}{anomaly_tag} ({ext})")
 
     return created
 
 
 async def run_pipeline_on_seeds(db, document_ids: list):
-    """Lancer le pipeline de traitement sur les documents seedés."""
-    if not document_ids:
-        return
-
     print(f"\n── Pipeline sur {len(document_ids)} documents ──────────────")
+    ok = err = 0
     for doc_id in document_ids:
         try:
             result = run_full_pipeline(doc_id)
             if result["success"]:
+                ok += 1
                 print(f"  ✓ {doc_id[:8]}... traité en {result.get('duration_ms', 0)}ms")
             else:
+                err += 1
                 print(f"  ⚠ {doc_id[:8]}... erreur : {result.get('error', 'inconnu')}")
         except Exception as e:
+            err += 1
             print(f"  ✗ {doc_id[:8]}... exception : {e}")
+    print(f"\n  Résultat : {ok} traités ✓  {err} erreurs")
 
 
 async def main():
@@ -286,36 +248,41 @@ async def main():
     print("║         DocPlatform — Seed de démonstration      ║")
     print("╚══════════════════════════════════════════════════╝")
 
-    print("\nRécupération de données réelles depuis l'API Sirene...")
-    real_companies = fetch_sirene_companies()
-    print(f"  → {len(real_companies)} entreprises récupérées pour enrichir les fournisseurs de démonstration.")
-
+    # Récupérer les entreprises depuis l'API SIRENE
+    print("\nRécupération des entreprises depuis l'API SIRENE...")
+    real_companies = fetch_sirene_companies(n_companies=15)
     if not real_companies:
-        print("Aucune donnée réelle récupérée.")
+        print("  ✗ Impossible de récupérer les données SIRENE. Vérifiez INSEE_API_KEY.")
+        return
+    print(f"  → {len(real_companies)} entreprises récupérées")
 
     client = AsyncIOMotorClient(settings.mongo_uri)
     db = client[settings.mongo_db]
 
     await seed_users(db)
-    await seed_suppliers(db, real_companies)
-    doc_ids = await seed_documents(db)
+    supplier_ids = await seed_suppliers(db, real_companies)
+    doc_ids = await seed_documents(db, supplier_ids)
+
     if doc_ids:
+        print(f"\n  {len(doc_ids)} nouveaux documents créés — lancement du pipeline...")
         await run_pipeline_on_seeds(db, doc_ids)
+    else:
+        print("\n  Aucun nouveau document à traiter (tout est déjà présent)")
 
     client.close()
 
     print("\n╔══════════════════════════════════════════════════╗")
     print("║                   Seed terminé ✓                 ║")
     print("╠══════════════════════════════════════════════════╣")
-    print("║  URL          : http://localhost:8000/docs        ║")
-    print("║  CRM          : http://localhost:5173             ║")
-    print("║  Compliance   : http://localhost:5174             ║")
-    print("║  Airflow      : http://localhost:8080             ║")
-    print("║  MinIO        : http://localhost:9001             ║")
+    print(f"║  Fournisseurs : {len(supplier_ids):<33}║")
+    print(f"║  Docs créés   : {len(doc_ids):<33}║")
     print("╠══════════════════════════════════════════════════╣")
-    print("║  admin / admin123      (rôle admin)               ║")
-    print("║  operator / operator123 (rôle opérateur)         ║")
-    print("║  viewer / viewer123    (rôle lecture seule)       ║")
+    print("║  CRM        : http://localhost:5173               ║")
+    print("║  Compliance : http://localhost:5174               ║")
+    print("╠══════════════════════════════════════════════════╣")
+    print("║  admin / admin123                                 ║")
+    print("║  operator / operator123                          ║")
+    print("║  viewer / viewer123                               ║")
     print("╚══════════════════════════════════════════════════╝\n")
 
 

@@ -34,17 +34,21 @@ DOC_TYPES = ["FACTURE", "DEVIS", "SIRET", "URSSAF", "KBIS", "RIB"]
 # Mots-clés discriminants par classe, avec poids relatifs
 KEYWORD_RULES: Dict[str, List[Tuple[str, float]]] = {
     "FACTURE": [
-        ("facture", 3.0), ("numéro de facture", 4.0), ("fact-", 3.0),
-        ("montant ttc", 3.0), ("montant ht", 2.5), ("total ttc", 3.0),
-        ("tva", 2.0), ("date d'échéance", 2.5), ("date d'émission", 1.5),
-        ("bon pour accord", 1.0), ("pénalités de retard", 2.0),
-        ("indemnité forfaitaire", 2.0), ("mode de règlement", 2.0),
+        ("facture", 4.0), ("numéro de facture", 5.0), ("fact-", 3.0),
+        ("date d'échéance", 3.5), ("date d'émission", 2.0),
+        ("pénalités de retard", 4.0), ("indemnité forfaitaire", 4.0),
+        ("mode de règlement", 3.0), ("escompte", 2.5),
+        ("vendeur", 2.0), ("acheteur", 2.0),
+        # "tva" retiré : trop générique, présent aussi dans DEVIS → confusion
+        # "montant ttc/ht/total ttc" retirés : présents dans DEVIS aussi
     ],
     "DEVIS": [
-        ("devis", 3.0), ("proposition commerciale", 4.0), ("offre", 2.0),
-        ("valable jusqu", 3.0), ("bon pour accord", 3.5), ("acceptation", 2.5),
-        ("référence devis", 4.0), ("devis-", 3.0), ("acompte de", 2.0),
-        ("validité", 2.0), ("prestations proposées", 3.0),
+        ("devis", 4.0), ("proposition commerciale", 5.0),
+        ("valable jusqu", 4.0), ("bon pour accord", 4.5),
+        ("référence devis", 5.0), ("devis-", 3.0),
+        ("acompte de", 3.0), ("validité", 2.5),
+        ("prestations proposées", 4.0), ("acceptation", 2.5),
+        ("non contractuel", 3.0), ("sous réserve", 2.0),
     ],
     "SIRET": [
         ("attestation de situation", 4.0), ("répertoire sirene", 5.0),

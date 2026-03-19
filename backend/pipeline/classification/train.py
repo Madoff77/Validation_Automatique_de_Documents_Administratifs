@@ -6,7 +6,7 @@ Usage :
   python -m pipeline.classification.train --n-per-class 200 --output /app/models/trained
 
 Pipeline :
-  1. Génération données synthétiques (via data-generator)
+  1. Génération données synthétiques → images dégradées → Tesseract OCR
   2. Préprocessing TF-IDF
   3. Entraînement Random Forest avec class_weight='balanced'
   4. Évaluation : cross-validation + rapport de classification
@@ -51,22 +51,95 @@ RESET = "\033[0m"
 
 
 def generate_training_data(n_per_class: int) -> list:
-    """Générer les données d'entraînement via le générateur synthétique."""
+    """
+    Générer les données d'entraînement via le vrai pipeline OCR.
+
+    Pipeline :
+      template text → image PNG → dégradation → Tesseract OCR → texte réel
+
+    Le modèle apprend ainsi exactement ce que le pipeline verra en production,
+    avec les artefacts réels de Tesseract (pas une simulation textuelle).
+    """
+    import io
+    import random
+    import cv2
+    from PIL import Image as PILImage
+    from pipeline.ocr.extractor import extract_text
+
     print(f"\n{'═'*60}")
     print(f"  Génération données d'entraînement ({n_per_class} par classe)")
+    print(f"  Pipeline : template → image dégradée → Tesseract OCR")
     print(f"{'═'*60}")
+
     try:
-        from generator import generate_training_dataset
-        print("  [OK] Générateur réaliste chargé (data-generator/generator.py)")
-        print("       Bruit OCR simulé sur ~55% des samples — accuracy attendue 85-94%")
-        return generate_training_dataset(n_per_class)
+        from generator import generate_text, text_to_image, degrade_image, DOC_TYPES as GEN_DOC_TYPES
     except ImportError as e:
-        print(f"\n  ERREUR : Impossible d'importer le générateur de données ({e})")
-        print("  Le générateur doit être accessible via :")
-        print("    Docker  : volume mount ./data-generator:/app/data-generator dans docker-compose.yml")
-        print("    Local   : lancer depuis la racine du projet")
-        print("  Commande correcte : make train  (depuis la racine)")
+        print(f"\n  ERREUR : Impossible d'importer le générateur ({e})")
+        print("    Docker : volume mount ./data-generator:/app/data-generator")
         raise SystemExit(1)
+
+    # Distribution des dégradations — couvre les cas réels de scan
+    DEGRADATION_SCHEDULE = [
+        (0.40, None,             None),           # 40% : PDF natif propre
+        (0.60, "noise",          (0.1, 0.35)),    # 20% : bruit léger (bon scanner)
+        (0.75, "blur",           (0.2, 0.5)),     # 15% : flou (mise au point imparfaite)
+        (0.87, "rotation",       (0.05, 0.25)),   # 12% : rotation (page mal alignée)
+        (0.95, "combined",       (0.3, 0.6)),     # 8%  : dégradation combinée
+        (1.00, "low_resolution", (0.3, 0.65)),    # 5%  : basse résolution (vieux scanner)
+    ]
+
+    dataset = []
+    n_clean = n_degraded = n_failed = 0
+
+    for doc_type in GEN_DOC_TYPES:
+        print(f"  {doc_type} : génération + OCR en cours...", flush=True)
+        for _ in range(n_per_class):
+            try:
+                text = generate_text(doc_type)
+                img = text_to_image(text)
+
+                roll = random.random()
+                deg_applied = None
+                for threshold, deg_type, severity_range in DEGRADATION_SCHEDULE:
+                    if roll < threshold:
+                        if deg_type is not None:
+                            severity = random.uniform(*severity_range)
+                            img = degrade_image(img, deg_type, severity)
+                            deg_applied = deg_type
+                        break
+
+                # Image numpy → bytes JPEG (même format que le pipeline production)
+                pil_img = PILImage.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                buf = io.BytesIO()
+                pil_img.save(buf, format="JPEG", quality=75)
+
+                # Vrai Tesseract — même fonction que task_ocr()
+                ocr_result = extract_text(buf.getvalue(), "image/jpeg")
+
+                if ocr_result.text.strip():
+                    dataset.append((ocr_result.text, doc_type))
+                    if deg_applied is None:
+                        n_clean += 1
+                    else:
+                        n_degraded += 1
+                else:
+                    n_failed += 1
+
+            except Exception as e:
+                n_failed += 1
+                print(f"    [WARN] {doc_type} sample ignoré : {e}")
+
+    random.shuffle(dataset)
+    total = len(dataset)
+    print(f"\n  Dataset total  : {total} documents")
+    print(f"  Propres        : {n_clean} ({n_clean*100//total if total else 0}%)")
+    print(f"  Dégradés       : {n_degraded} ({n_degraded*100//total if total else 0}%)")
+    print(f"  Échecs OCR     : {n_failed}")
+
+    if not dataset:
+        raise SystemExit("Aucun document généré — vérifier Tesseract et le générateur")
+
+    return dataset
 
 
 def build_vectorizer(texts: list) -> TfidfVectorizer:
