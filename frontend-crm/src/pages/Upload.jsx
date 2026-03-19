@@ -16,13 +16,14 @@ import clsx from "clsx";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-    Combobox,
-    ComboboxContent,
-    ComboboxEmpty,
-    ComboboxInput,
-    ComboboxItem,
-    ComboboxList,
-} from "@/components/ui/combobox";
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 
 const ACCEPT = {
@@ -50,13 +51,6 @@ export default function Upload() {
         queryKey: ["suppliers"],
         queryFn: () => suppliersApi.list(),
     });
-
-    const supplierItems = suppliers.map((supplier) => ({
-        label: supplier.name,
-        value: String(supplier.supplier_id),
-    }));
-    const selectedSupplier =
-        supplierItems.find((item) => item.value === supplierId) ?? null;
 
     const onDrop = useCallback((accepted) => {
         const newFiles = accepted.map((file) => ({
@@ -151,31 +145,28 @@ export default function Upload() {
             <p className="text-sm text-gray-500 mb-8">
                 Formats supportés : PDF, JPEG, PNG, TIFF — Max 50 Mo par fichier
             </p>
-            <div className="mb-6 w-full max-w-60">
-                <Combobox
-                    items={supplierItems}
-                    itemToStringValue={(item) => item.label}
-                    value={selectedSupplier}
-                    onValueChange={(item) => setSupplierId(item?.value ?? "")}
-                    disabled={suppliersLoading || suppliers.length === 0}
-                >
-                    <ComboboxInput placeholder="Sélectionner un fournisseur" />
-                    <ComboboxContent>
-                        <ComboboxEmpty>
-                            {suppliers.length === 0
-                                ? "Aucun fournisseur disponible"
-                                : "Aucun fournisseur trouvé"}
-                        </ComboboxEmpty>
-                        <ComboboxList>
-                            {(item) => (
-                                <ComboboxItem key={item.value} value={item}>
-                                    {item.label}
-                                </ComboboxItem>
-                            )}
-                        </ComboboxList>
-                    </ComboboxContent>
-                </Combobox>
-            </div>
+            <Select
+                onValueChange={(value) => setSupplierId(value)}
+                value={supplierId}
+                disabled={suppliersLoading || suppliers.length === 0}
+            >
+                <SelectTrigger className="mb-6 w-full max-w-60">
+                    <SelectValue placeholder="Sélectionner un fournisseur" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectGroup>
+                        <SelectLabel>Fournisseurs</SelectLabel>
+                        {suppliers.map((supplier) => (
+                            <SelectItem
+                                key={supplier.supplier_id}
+                                value={String(supplier.supplier_id)}
+                            >
+                                {supplier.name}
+                            </SelectItem>
+                        ))}
+                    </SelectGroup>
+                </SelectContent>
+            </Select>
             <div
                 {...getRootProps()}
                 className={clsx(

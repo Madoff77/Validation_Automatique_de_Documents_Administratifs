@@ -7,14 +7,13 @@ import { ComplianceBadge } from "../components/StatusBadge";
 import { usePermissions } from "../hooks/usePermissions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup } from "@/components/ui/field";
+import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group";
-import { Label } from "@/components/ui/label";
 import {
     Dialog,
     DialogClose,
@@ -80,7 +79,7 @@ function CreateSupplierDialog({ canCreateSupplier, trigger }) {
                         mutation.mutate(form);
                     }}
                 >
-                    <DialogHeader>
+                    <DialogHeader className="mb-4">
                         <DialogTitle>Nouveau fournisseur</DialogTitle>
                         <DialogDescription>
                             Renseignez les informations pour créer un
@@ -90,20 +89,22 @@ function CreateSupplierDialog({ canCreateSupplier, trigger }) {
 
                     <FieldGroup>
                         <Field>
-                            <Label htmlFor="supplier-name">
-                                Raison sociale *
-                            </Label>
+                            <FieldLabel htmlFor="supplier-name">
+                                Raison sociale <span className="text-destructive">*</span>
+                            </FieldLabel>
                             <Input
                                 id="supplier-name"
                                 name="name"
                                 value={form.name}
                                 onChange={set("name")}
-                                required
                                 placeholder="ACME SAS"
+                                required
                             />
                         </Field>
                         <Field>
-                            <Label htmlFor="supplier-siret">SIRET</Label>
+                            <FieldLabel htmlFor="supplier-siret">
+                                SIRET <span className="text-destructive">*</span>
+                            </FieldLabel>
                             <Input
                                 id="supplier-siret"
                                 name="siret"
@@ -112,11 +113,15 @@ function CreateSupplierDialog({ canCreateSupplier, trigger }) {
                                 placeholder="73282932000074"
                                 pattern="\d{14}"
                                 title="14 chiffres"
+                                maxLength={14}
+                                required
                             />
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field>
-                                <Label htmlFor="supplier-email">Email</Label>
+                                <FieldLabel htmlFor="supplier-email">
+                                    Email <span className="text-destructive">*</span>
+                                </FieldLabel>
                                 <Input
                                     id="supplier-email"
                                     name="email"
@@ -124,12 +129,13 @@ function CreateSupplierDialog({ canCreateSupplier, trigger }) {
                                     value={form.email}
                                     onChange={set("email")}
                                     placeholder="contact@acme.com"
+                                    required
                                 />
                             </Field>
                             <Field>
-                                <Label htmlFor="supplier-phone">
+                                <FieldLabel htmlFor="supplier-phone">
                                     Téléphone
-                                </Label>
+                                </FieldLabel>
                                 <Input
                                     id="supplier-phone"
                                     name="phone"
@@ -140,7 +146,9 @@ function CreateSupplierDialog({ canCreateSupplier, trigger }) {
                             </Field>
                         </div>
                         <Field>
-                            <Label htmlFor="supplier-address">Adresse</Label>
+                            <FieldLabel htmlFor="supplier-address">
+                                Adresse
+                            </FieldLabel>
                             <Input
                                 id="supplier-address"
                                 name="address"
