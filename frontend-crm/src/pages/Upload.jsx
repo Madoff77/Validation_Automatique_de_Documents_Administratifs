@@ -8,8 +8,6 @@ import {
     X,
     CheckCircle,
     AlertCircle,
-    Loader2,
-    ArrowLeft,
 } from "lucide-react";
 import { suppliersApi } from "@/api/suppliers";
 import { documentsApi } from "@/api/documents";
@@ -17,15 +15,15 @@ import clsx from "clsx";
 
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+    Combobox,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxList,
+} from "@/components/ui/combobox";
+import { Spinner } from "@/components/ui/spinner";
 
 const ACCEPT = {
     "application/pdf": [".pdf"],
@@ -36,7 +34,7 @@ const ACCEPT = {
 
 const STATUS_ICON = {
     idle: <File size={16} className="text-gray-400" />,
-    uploading: <Loader2 size={16} className="animate-spin text-blue-500" />,
+    uploading: <Spinner size={16} className="text-blue-500" />,
     success: <CheckCircle size={16} className="text-green-500" />,
     error: <AlertCircle size={16} className="text-red-500" />,
 };
@@ -52,6 +50,13 @@ export default function Upload() {
         queryKey: ["suppliers"],
         queryFn: () => suppliersApi.list(),
     });
+
+    const supplierItems = suppliers.map((supplier) => ({
+        label: supplier.name,
+        value: String(supplier.supplier_id),
+    }));
+    const selectedSupplier =
+        supplierItems.find((item) => item.value === supplierId) ?? null;
 
     const onDrop = useCallback((accepted) => {
         const newFiles = accepted.map((file) => ({
@@ -139,58 +144,45 @@ export default function Upload() {
     const successCount = files.filter((f) => f.status === "success").length;
 
     return (
-        <div className="p-8 max-w-3xl mx-auto">
-            <Button variant="secondary" size="sm" className="mb-6" asChild>
-                <Link
-                    to="/upload"
-                >
-                    <ArrowLeft size={15} /> Retour
-                </Link>
-            </Button>
-
+        <div className="p-8 max-w-6xl mx-auto">
             <h1 className="font-prata text-2xl font-bold text-gray-900 mb-1">
                 Importer des documents
             </h1>
             <p className="text-sm text-gray-500 mb-8">
                 Formats supportés : PDF, JPEG, PNG, TIFF — Max 50 Mo par fichier
             </p>
-            <Field className="w-full max-w-64 mb-6">
-                <FieldLabel>Fournisseur</FieldLabel>
-                <Select
-                    value={supplierId || undefined}
-                    onValueChange={setSupplierId}
+            <div className="mb-6 w-full max-w-60">
+                <Combobox
+                    items={supplierItems}
+                    itemToStringValue={(item) => item.label}
+                    value={selectedSupplier}
+                    onValueChange={(item) => setSupplierId(item?.value ?? "")}
                     disabled={suppliersLoading || suppliers.length === 0}
                 >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner un fournisseur" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            {suppliers.length === 0 ? (
-                                <SelectItem value="no-supplier" disabled>
-                                    Aucun fournisseur disponible
-                                </SelectItem>
-                            ) : (
-                                suppliers.map((s) => (
-                                    <SelectItem
-                                        key={s.supplier_id}
-                                        value={String(s.supplier_id)}
-                                    >
-                                        {s.name}
-                                    </SelectItem>
-                                ))
+                    <ComboboxInput placeholder="Sélectionner un fournisseur" />
+                    <ComboboxContent>
+                        <ComboboxEmpty>
+                            {suppliers.length === 0
+                                ? "Aucun fournisseur disponible"
+                                : "Aucun fournisseur trouvé"}
+                        </ComboboxEmpty>
+                        <ComboboxList>
+                            {(item) => (
+                                <ComboboxItem key={item.value} value={item}>
+                                    {item.label}
+                                </ComboboxItem>
                             )}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-            </Field>
+                        </ComboboxList>
+                    </ComboboxContent>
+                </Combobox>
+            </div>
             <div
                 {...getRootProps()}
                 className={clsx(
-                    "border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all mb-6",
+                    "mb-6 rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-all bg-card",
                     isDragActive
-                        ? "border-primary-500 bg-primary-50"
-                        : "border-gray-300 hover:border-primary-400 hover:bg-gray-50",
+                        ? "border-ring bg-accent ring-2 ring-ring/30"
+                        : "border-border hover:border-ring hover:bg-accent/30",
                 )}
             >
                 <input {...getInputProps()} />
@@ -198,24 +190,24 @@ export default function Upload() {
                     size={36}
                     className={clsx(
                         "mx-auto mb-3",
-                        isDragActive ? "text-primary-500" : "text-gray-400",
+                        isDragActive ? "text-primary-600" : "text-muted-foreground",
                     )}
                 />
-                <p className="font-medium text-gray-700">
+                <p className="font-medium text-foreground">
                     {isDragActive
                         ? "Déposez les fichiers ici…"
                         : "Glissez-déposez vos documents"}
                 </p>
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="mt-1 text-sm text-muted-foreground">
                     ou{" "}
-                    <span className="text-primary-600">
+                    <span className="text-primary-600 font-medium">
                         cliquez pour sélectionner
                     </span>
                 </p>
             </div>
             {files.length > 0 && (
                 <div className="card mb-6">
-                    <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <div className="px-5 py-3 border-b border-border flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">
                             {files.length} fichier{files.length > 1 ? "s" : ""}
                             {successCount > 0 && (
@@ -268,7 +260,7 @@ export default function Upload() {
                                             )}
                                     </p>
                                     {item.status === "uploading" && (
-                                        <div className="mt-1.5 h-1 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="mt-1.5 h-1 bg-background rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-primary-500 transition-all rounded-full"
                                                 style={{

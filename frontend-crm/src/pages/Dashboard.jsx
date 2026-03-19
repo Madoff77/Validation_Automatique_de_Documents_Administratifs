@@ -17,6 +17,15 @@ import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 
 function StatCard({ icon: Icon, label, value, sub, color = "blue", loading }) {
     const colors = {
@@ -27,7 +36,7 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", loading }) {
         purple: "bg-purple-50 text-purple-600",
     };
     return (
-        <Card className="py-4 gap-0 shadow-none">
+        <Card className="py-4 gap-0 shadow-none h-full">
             <CardContent className="px-4 flex items-center gap-3">
                 <div className={`p-2.5 rounded-lg ${colors[color]}`}>
                     <Icon size={20} />
@@ -80,126 +89,200 @@ export default function Dashboard() {
                 </div>
                 {canUpload && (
                     <Button asChild>
-                        <Link to="/upload">
+                        <Link
+                            to="/upload"
+                            aria-label="Importer des documents"
+                            className="flex items-center gap-0 sm:gap-2"
+                        >
                             <Upload size={16} />
-                            Importer des documents
+                            <span className="hidden sm:inline">
+                                Importer des documents
+                            </span>
                         </Link>
                     </Button>
                 )}
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <StatCard
-                    icon={FileText}
-                    label="Total documents"
-                    value={stats?.total_documents}
-                    color="blue"
-                    loading={loadingStats}
-                />
-                <StatCard
-                    icon={CheckCircle}
-                    label="Traités"
-                    value={stats?.documents_processed}
-                    color="green"
-                    loading={loadingStats}
-                    sub={`${stats ? Math.round((stats.documents_processed / Math.max(stats.total_documents, 1)) * 100) : 0}%`}
-                />
-                <StatCard
-                    icon={Clock}
-                    label="En cours"
-                    value={stats?.documents_pending}
-                    color="yellow"
-                    loading={loadingStats}
-                />
-                <StatCard
-                    icon={XCircle}
-                    label="Erreurs"
-                    value={stats?.documents_error}
-                    color="red"
-                    loading={loadingStats}
-                />
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <StatCard
-                    icon={Users}
-                    label="Fournisseurs"
-                    value={stats?.total_suppliers}
-                    color="purple"
-                    loading={loadingStats}
-                />
-                <StatCard
-                    icon={AlertTriangle}
-                    label="Anomalies"
-                    value={stats?.unresolved_anomalies}
-                    color="yellow"
-                    loading={loadingStats}
-                    sub="non résolues"
-                />
-                <StatCard
-                    icon={XCircle}
-                    label="Critiques"
-                    value={stats?.critical_anomalies}
-                    color="red"
-                    loading={loadingStats}
-                />
-                <StatCard
-                    icon={TrendingUp}
-                    label="Expire bientôt"
-                    value={stats?.documents_expiring_soon}
-                    color="yellow"
-                    loading={loadingStats}
-                />
-            </div>
-            <div className="card">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <h2 className="font-semibold text-gray-900">
-                        Documents récents
-                    </h2>
-                    <Button variant="secondary" asChild>
-                        <Link  to="/documents">Voir tout</Link>
-                    </Button>
+            <div className="flex flex-col gap-8">
+                <div className="flex flex-wrap gap-4">
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={FileText}
+                            label="Total documents"
+                            value={stats?.total_documents}
+                            color="blue"
+                            loading={loadingStats}
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={CheckCircle}
+                            label="Traités"
+                            value={stats?.documents_processed}
+                            color="green"
+                            loading={loadingStats}
+                            sub={`${stats ? Math.round((stats.documents_processed / Math.max(stats.total_documents, 1)) * 100) : 0}%`}
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={Clock}
+                            label="En cours"
+                            value={stats?.documents_pending}
+                            color="yellow"
+                            loading={loadingStats}
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={XCircle}
+                            label="Erreurs"
+                            value={stats?.documents_error}
+                            color="red"
+                            loading={loadingStats}
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={Users}
+                            label="Fournisseurs"
+                            value={stats?.total_suppliers}
+                            color="purple"
+                            loading={loadingStats}
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={AlertTriangle}
+                            label="Anomalies"
+                            value={stats?.unresolved_anomalies}
+                            color="yellow"
+                            loading={loadingStats}
+                            sub="non résolues"
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={XCircle}
+                            label="Critiques"
+                            value={stats?.critical_anomalies}
+                            color="red"
+                            loading={loadingStats}
+                        />
+                    </div>
+                    <div className="basis-full sm:basis-[calc(50%-0.5rem)] lg:basis-[calc(25%-0.75rem)] min-w-0">
+                        <StatCard
+                            icon={TrendingUp}
+                            label="Expire bientôt"
+                            value={stats?.documents_expiring_soon}
+                            color="yellow"
+                            loading={loadingStats}
+                        />
+                    </div>
                 </div>
-                <div className="divide-y divide-gray-50">
-                    {loadingDocs ? (
-                        Array.from({ length: 5 }).map((_, i) => (
-                            <div
-                                key={i}
-                                className="px-6 py-4 flex items-center gap-4 animate-pulse"
-                            >
-                                <div className="h-4 w-24 bg-gray-200 rounded" />
-                                <div className="h-4 w-16 bg-gray-200 rounded" />
-                                <div className="h-4 flex-1 bg-gray-200 rounded" />
-                                <div className="h-4 w-20 bg-gray-200 rounded" />
-                            </div>
-                        ))
-                    ) : recentDocs?.length === 0 ? (
-                        <div className="px-6 py-12 text-center text-gray-400 text-sm">
-                            Aucun document.{" "}
-                            <Button asChild>
-                                <Link to="/upload">Importer</Link>
-                            </Button>
-                        </div>
-                    ) : (
-                        recentDocs?.map((doc) => (
-                            <Link
-                                key={doc.document_id}
-                                to={`/documents/${doc.document_id}`}
-                                className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50 transition-colors"
-                            >
-                                <DocTypeBadge type={doc.doc_type} />
-                                <span className="flex-1 text-sm text-gray-700 truncate min-w-0">
-                                    {doc.original_filename}
-                                </span>
-                                <DocStatusBadge status={doc.status} />
-                                <span className="text-xs text-gray-400 whitespace-nowrap">
-                                    {formatDistanceToNow(
-                                        new Date(doc.upload_timestamp),
-                                        { addSuffix: true, locale: fr },
+                <Separator />
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="font-prata text-lg font-bold">
+                            Documents récents
+                        </h2>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link to="/documents">Voir tout</Link>
+                        </Button>
+                    </div>
+                    <Card className="shadow-none gap-0 p-0">
+                        <CardContent className="p-0">
+                            <Table className="px-6">
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Nom</TableHead>
+                                        <TableHead>Statut</TableHead>
+                                        <TableHead className="text-right">
+                                            Importé
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {loadingDocs ? (
+                                        Array.from({ length: 5 }).map(
+                                            (_, i) => (
+                                                <TableRow
+                                                    key={i}
+                                                    className="animate-pulse"
+                                                >
+                                                    <TableCell>
+                                                        <div className="h-6 w-20 bg-gray-200 rounded" />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="h-4 w-56 bg-gray-200 rounded" />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="h-6 w-24 bg-gray-200 rounded" />
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="h-4 w-20 bg-gray-200 rounded ml-auto" />
+                                                    </TableCell>
+                                                </TableRow>
+                                            ),
+                                        )
+                                    ) : recentDocs?.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={4}
+                                                className="py-10 text-center text-gray-400"
+                                            >
+                                                <div className="flex items-center justify-center gap-3">
+                                                    <span>Aucun document.</span>
+                                                    <Button size="sm" asChild>
+                                                        <Link to="/upload">
+                                                            Importer
+                                                        </Link>
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        recentDocs?.map((doc) => (
+                                            <TableRow key={doc.document_id}>
+                                                <TableCell>
+                                                    <DocTypeBadge
+                                                        type={doc.doc_type}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="max-w-[320px]">
+                                                    <Link
+                                                        to={`/documents/${doc.document_id}`}
+                                                        className="text-sm text-gray-700 hover:underline truncate block"
+                                                        title={
+                                                            doc.original_filename
+                                                        }
+                                                    >
+                                                        {doc.original_filename}
+                                                    </Link>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <DocStatusBadge
+                                                        status={doc.status}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="text-right text-xs text-gray-400">
+                                                    {formatDistanceToNow(
+                                                        new Date(
+                                                            doc.upload_timestamp,
+                                                        ),
+                                                        {
+                                                            addSuffix: true,
+                                                            locale: fr,
+                                                        },
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
                                     )}
-                                </span>
-                            </Link>
-                        ))
-                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>

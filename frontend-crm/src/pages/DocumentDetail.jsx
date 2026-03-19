@@ -8,14 +8,12 @@ import {
     AlertTriangle,
     CheckCircle,
     Info,
-    Loader2,
     FileText,
     Building2,
     Calendar,
     CreditCard,
     Euro,
-    Eye,
-    X,
+    Eye
 } from "lucide-react";
 import { documentsApi } from "../api/documents";
 import {
@@ -27,6 +25,13 @@ import DocumentViewer from "../components/DocumentViewer";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 
 function FieldRow({ icon: Icon, label, value, highlight }) {
     if (!value) return null;
@@ -44,7 +49,7 @@ function FieldRow({ icon: Icon, label, value, highlight }) {
             </div>
             <div className="flex-1 min-w-0">
                 <p className="text-xs text-gray-400 font-medium">{label}</p>
-                <p className="text-sm text-gray-900 font-medium">{value}</p>
+                <p className="text-sm font-medium">{value}</p>
             </div>
         </div>
     );
@@ -80,7 +85,7 @@ const formatAmount = (v) =>
 export default function DocumentDetail() {
     const { id } = useParams();
     const qc = useQueryClient();
-    const [showViewer, setShowViewer] = useState(false);
+    const [openViewer, setOpenViewer] = useState(false);
 
     const { data: doc, isLoading } = useQuery({
         queryKey: ["document", id],
@@ -100,7 +105,7 @@ export default function DocumentDetail() {
     if (isLoading)
         return (
             <div className="p-8 flex items-center gap-3 text-gray-500">
-                <Loader2 size={20} className="animate-spin" /> Chargement…
+                <Spinner size={20} /> Chargement…
             </div>
         );
 
@@ -115,21 +120,19 @@ export default function DocumentDetail() {
     const inProgress = !isProcessed && !isError;
 
     return (
-        <div className="p-8 max-w-5xl mx-auto">
-            <Link
-                to="/documents"
-                className="inline-flex items-center gap-1.5 text-sm text-gray-500
-                                        hover:text-gray-700 mb-6 transition-colors"
-            >
-                <ArrowLeft size={15} /> Documents
-            </Link>
+        <div className="p-8 max-w-6xl mx-auto">
+            <Button variant="secondary" size="sm" className="mb-6" asChild>
+                <Link to="/suppliers">
+                    <ArrowLeft size={15} /> Documents
+                </Link>
+            </Button>
             <div className="flex items-start justify-between mb-6">
                 <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                    <div className="w-12 h-12 bg-card rounded-xl flex items-center justify-center shrink-0">
                         <FileText size={24} className="text-gray-500" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold text-gray-900 max-w-xl">
+                        <h1 className="text-xl font-bold max-w-xl">
                             {doc.original_filename}
                         </h1>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -155,21 +158,25 @@ export default function DocumentDetail() {
 
                 <div className="flex items-center gap-2 shrink-0">
                     {isError && (
-                        <Button variant="descructive"
+                        <Button
+                            variant="destructive"
                             onClick={() => reprocessMutation.mutate()}
                         >
                             {reprocessMutation.isPending ? (
-                                <Loader2 size={15} className="animate-spin" />
+                                <Spinner size={15} />
                             ) : (
                                 <RefreshCw size={15} />
                             )}
                             Relancer
                         </Button>
                     )}
-                    <Button variant="outline" onClick={() => setShowViewer(true)}>
+                    <Button
+                        variant="outline"
+                           onClick={() => setOpenViewer(true)}
+                    >
                         <Eye size={15} /> Visualiser
                     </Button>
-                    <Button variant="outline" asChild>
+                    <Button asChild>
                         <a
                             href={documentsApi.getDownloadUrl(id)}
                             target="_blank"
@@ -181,50 +188,53 @@ export default function DocumentDetail() {
                 </div>
             </div>
             {inProgress && (
-                <div className="card p-4 mb-6 flex items-center gap-3 bg-blue-50 border-blue-100">
-                    <Loader2
-                        size={18}
-                        className="text-blue-500 animate-spin shrink-0"
-                    />
-                    <div>
-                        <p className="text-sm font-medium text-blue-800">
-                            Traitement en cours…
-                        </p>
-                        <p className="text-xs text-blue-600 mt-0.5">
-                            Statut actuel : <strong>{doc.status}</strong>
-                            {doc.airflow_run_id &&
-                                ` · Run Airflow : ${doc.airflow_run_id}`}
-                        </p>
-                    </div>
-                </div>
+                <Card className="mb-6 gap-0 py-0 bg-blue-50 border-blue-100 shadow-none">
+                    <CardContent className="p-4 flex items-center gap-3">
+                        <Spinner size={18} className="text-blue-500 shrink-0" />
+                        <div>
+                            <p className="text-sm font-medium text-blue-800">
+                                Traitement en cours…
+                            </p>
+                            <p className="text-xs text-blue-600 mt-0.5">
+                                Statut actuel : <strong>{doc.status}</strong>
+                                {doc.airflow_run_id &&
+                                    ` · Run Airflow : ${doc.airflow_run_id}`}
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             {isError && doc.error_message && (
-                <div className="card p-4 mb-6 flex items-start gap-3 bg-red-50 border-red-100">
-                    <AlertTriangle
-                        size={18}
-                        className="text-red-500 shrink-0 mt-0.5"
-                    />
-                    <div>
-                        <p className="text-sm font-medium text-red-800">
-                            Erreur de traitement
-                        </p>
-                        <p className="text-xs text-red-600 mt-0.5 font-mono">
-                            {doc.error_message}
-                        </p>
-                    </div>
-                </div>
+                <Card className="mb-6 gap-0 py-0 bg-red-50 border-red-100 shadow-none">
+                    <CardContent className="p-4 flex items-start gap-3">
+                        <AlertTriangle
+                            size={18}
+                            className="text-red-500 shrink-0 mt-0.5"
+                        />
+                        <div>
+                            <p className="text-sm font-medium text-red-800">
+                                Erreur de traitement
+                            </p>
+                            <p className="text-xs text-red-600 mt-0.5 font-mono">
+                                {doc.error_message}
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             <div className="grid grid-cols-3 gap-6">
                 <div className="col-span-2 space-y-5">
                     {isProcessed && Object.keys(ext).length > 0 ? (
-                        <div className="card p-5">
-                            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                                <Info size={16} className="text-primary-600" />
-                                Données extraites
-                            </h2>
-                            <div className="space-y-0.5">
+                        <Card className="gap-0 py-0 shadow-none">
+                            <CardHeader className="px-6 py-4 gap-0">
+                                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                    <Info size={16} className="text-primary-600" />
+                                    Données extraites
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-6 py-4 border-t">
                                 <FieldRow
                                     icon={Building2}
                                     label="Raison sociale"
@@ -311,10 +321,11 @@ export default function DocumentDetail() {
                                     label="Adresse"
                                     value={ext.adresse}
                                 />
-                            </div>
-                        </div>
+                            </CardContent>
+                        </Card>
                     ) : isProcessed ? (
-                        <div className="card p-8 text-center text-gray-400">
+                        <Card className="gap-0 py-0 shadow-none">
+                            <CardContent className="p-8 text-center text-gray-400">
                             <Info
                                 size={28}
                                 className="mx-auto mb-2 text-gray-300"
@@ -322,33 +333,38 @@ export default function DocumentDetail() {
                             <p className="text-sm">
                                 Aucune donnée extraite pour ce document.
                             </p>
-                        </div>
+                            </CardContent>
+                        </Card>
                     ) : null}
                     {checks.length > 0 && (
-                        <div className="card p-5">
-                            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                                <CheckCircle
-                                    size={16}
-                                    className="text-green-600"
-                                />
-                                Résultats de validation
-                                <ValidationBadge status={validation.status} />
-                            </h2>
-                            <div className="space-y-0.5">
+                        <Card className="gap-0 py-0 shadow-none">
+                            <CardHeader className="px-6 py-4 gap-0">
+                                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                    <CheckCircle
+                                        size={16}
+                                        className="text-green-600"
+                                    />
+                                    Résultats de validation
+                                    <ValidationBadge status={validation.status} />
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-6 py-4 border-t space-y-0.5">
                                 {checks.map((c, i) => (
                                     <CheckRow key={i} check={c} />
                                 ))}
-                            </div>
-                        </div>
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
 
                 <div className="space-y-4">
-                    <div className="card p-5">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-4">
-                            Informations
-                        </h3>
-                        <div className="space-y-3 text-sm">
+                    <Card className="gap-0 py-0 shadow-none">
+                        <CardHeader className="px-6 py-4 gap-0">
+                            <CardTitle className="text-base font-semibold">
+                                Informations
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-6 py-4 border-t space-y-3 text-sm">
                             <div>
                                 <span className="text-xs text-gray-400 block">
                                     Fournisseur
@@ -413,28 +429,29 @@ export default function DocumentDetail() {
                                     </span>
                                 </div>
                             )}
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
 
                     {doc.airflow_run_id && (
-                        <div className="card p-4">
-                            <p className="text-xs text-gray-400 font-medium mb-1">
-                                Run Airflow
-                            </p>
-                            <p className="text-xs text-gray-600 font-mono break-all">
-                                {doc.airflow_run_id}
-                            </p>
-                        </div>
+                        <Card className="gap-0 py-0 shadow-none">
+                            <CardContent className="p-4">
+                                <p className="text-xs text-gray-400 font-medium mb-1">
+                                    Run Airflow
+                                </p>
+                                <p className="text-xs text-gray-600 font-mono break-all">
+                                    {doc.airflow_run_id}
+                                </p>
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
             </div>
 
-            {showViewer && (
-                <DocumentViewer
-                    documentId={id}
-                    onClose={() => setShowViewer(false)}
-                />
-            )}
+            <DocumentViewer
+                documentId={id}
+                open={openViewer}
+                onOpenChange={setOpenViewer}
+            />
         </div>
     );
 }

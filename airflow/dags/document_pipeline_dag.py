@@ -61,6 +61,7 @@ DEFAULT_ARGS = {
 # FONCTIONS WRAPPER (appelées par PythonOperator)
 # ─────────────────────────────────────────────────────────────
 
+
 def _get_document_id(context: dict) -> str:
     """
     Extraire document_id depuis dag_run.conf.

@@ -4,7 +4,6 @@ import { useAuth } from "../contexts/AuthContext";
 import {
     Eye,
     EyeOff,
-    Loader2,
     ScanText,
     FileText,
     Receipt,
@@ -18,6 +17,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 
 const floatingCards = [
     {
@@ -423,10 +423,7 @@ export default function Login() {
                                 >
                                     {loading ? (
                                         <>
-                                            <Loader2
-                                                size={15}
-                                                className="spin"
-                                            />
+                                            <Spinner size={15} />
                                             Connexion…
                                         </>
                                     ) : (

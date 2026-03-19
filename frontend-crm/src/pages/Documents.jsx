@@ -8,10 +8,11 @@ import { usePermissions } from "../hooks/usePermissions";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
+import { Card } from "@/components/ui/card";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
 } from "@/components/ui/input-group";
 import {
     Select,
@@ -20,6 +21,21 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+} from "@/components/ui/empty";
 
 const DOC_TYPES = ["FACTURE", "DEVIS", "SIRET", "URSSAF", "KBIS", "RIB"];
 const STATUSES = [
@@ -132,75 +148,85 @@ export default function Documents() {
                     </SelectContent>
                 </Select>
             </div>
-            <div className="card overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                            <th className="text-left px-5 py-3 font-medium text-gray-500">
-                                Fichier
-                            </th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">
-                                Type
-                            </th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500">
-                                Statut
-                            </th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">
-                                Validation
-                            </th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500 hidden md:table-cell">
-                                Confiance
-                            </th>
-                            <th className="text-left px-4 py-3 font-medium text-gray-500 hidden md:table-cell">
-                                Importé le
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {isLoading ? (
-                            Array.from({ length: 8 }).map((_, i) => (
-                                <tr key={i} className="animate-pulse">
+            <Card className="shadow-none p-0">
+                {isLoading ? (
+                    <Table className="px-6 text-sm">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Fichier</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Statut</TableHead>
+                                <TableHead className="hidden lg:table-cell">
+                                    Validation
+                                </TableHead>
+                                <TableHead className="hidden md:table-cell">
+                                    Confiance
+                                </TableHead>
+                                <TableHead className="hidden md:table-cell">
+                                    Importé le
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {Array.from({ length: 8 }).map((_, i) => (
+                                <TableRow key={i} className="animate-pulse">
                                     {Array.from({ length: 6 }).map((_, j) => (
-                                        <td key={j} className="px-5 py-4">
-                                            <div className="h-4 bg-gray-100 rounded-sm w-3/4" />
-                                        </td>
+                                        <TableCell key={j}>
+                                            <div className="h-4 bg-background rounded-sm w-3/4" />
+                                        </TableCell>
                                     ))}
-                                </tr>
-                            ))
-                        ) : filtered.length === 0 ? (
-                            <tr>
-                                <td
-                                    colSpan={6}
-                                    className="px-5 py-16 text-center text-gray-400"
-                                >
-                                    <FileText
-                                        size={36}
-                                        className="mx-auto mb-3 text-gray-300"
-                                    />
-                                    Aucun document trouvé
-                                </td>
-                            </tr>
-                        ) : (
-                            filtered.map((doc) => (
-                                <tr
-                                    key={doc.document_id}
-                                    className="hover:bg-gray-50 transition-colors"
-                                >
-                                    <td className="px-5 py-3.5">
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                ) : filtered.length === 0 ? (
+                    <Empty>
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <FileText />
+                            </EmptyMedia>
+                            <EmptyTitle>Aucun document trouvé</EmptyTitle>
+                            <EmptyDescription>
+                                Essayez d'ajuster vos filtres ou de relancer une recherche.
+                            </EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                ) : (
+                    <Table className="px-6 text-sm">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Fichier</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Statut</TableHead>
+                                <TableHead className="hidden lg:table-cell">
+                                    Validation
+                                </TableHead>
+                                <TableHead className="hidden md:table-cell">
+                                    Confiance
+                                </TableHead>
+                                <TableHead className="hidden md:table-cell">
+                                    Importé le
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filtered.map((doc) => (
+                                <TableRow key={doc.document_id}>
+                                    <TableCell className="max-w-xs">
                                         <Link
                                             to={`/documents/${doc.document_id}`}
                                             className="text-gray-800 hover:text-primary-600 font-medium truncate max-w-xs block"
                                         >
                                             {doc.original_filename}
                                         </Link>
-                                    </td>
-                                    <td className="px-4 py-3.5">
+                                    </TableCell>
+                                    <TableCell>
                                         <DocTypeBadge type={doc.doc_type} />
-                                    </td>
-                                    <td className="px-4 py-3.5">
+                                    </TableCell>
+                                    <TableCell>
                                         <DocStatusBadge status={doc.status} />
-                                    </td>
-                                    <td className="px-4 py-3.5 hidden lg:table-cell">
+                                    </TableCell>
+                                    <TableCell className="hidden lg:table-cell">
                                         {doc.validation_status && (
                                             <span
                                                 className={`text-xs font-medium ${
@@ -214,34 +240,34 @@ export default function Documents() {
                                                 }`}
                                             >
                                                 {doc.validation_status === "ok"
-                                                    ? "✓ OK"
+                                                    ? "OK"
                                                     : doc.validation_status ===
                                                         "warning"
-                                                      ? "⚠ Alerte"
+                                                      ? "Alerte"
                                                       : doc.validation_status ===
                                                           "error"
-                                                        ? "✗ Erreur"
+                                                        ? "Erreur"
                                                         : "—"}
                                             </span>
                                         )}
-                                    </td>
-                                    <td className="px-4 py-3.5 hidden md:table-cell text-gray-500">
+                                    </TableCell>
+                                    <TableCell className="hidden md:table-cell text-gray-500">
                                         {doc.classification_confidence
                                             ? `${(doc.classification_confidence * 100).toFixed(0)}%`
                                             : "—"}
-                                    </td>
-                                    <td className="px-4 py-3.5 hidden md:table-cell text-gray-400 text-xs">
+                                    </TableCell>
+                                    <TableCell className="hidden md:table-cell text-gray-400 text-xs">
                                         {format(
                                             new Date(doc.upload_timestamp),
                                             "dd/MM/yyyy HH:mm",
                                         )}
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </Card>
         </div>
     );
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { X, Download, Building2, Calendar, CreditCard, Euro, FileText, Loader2 } from 'lucide-react'
+import { X, Download, Building2, Calendar, CreditCard, Euro, FileText } from 'lucide-react'
 import { documentsApi } from '../api'
 import apiClient from '../api/client'
+import { Spinner } from './ui/spinner'
 
 const formatAmount = (v) => v != null ? `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` : 'N/A'
 
@@ -82,7 +83,7 @@ export default function DocumentViewer({ documentId, onClose }) {
           <div className="flex-1 bg-muted relative border-r border-border flex items-center justify-center">
             {!iframeLoaded && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground bg-muted z-10">
-                <Loader2 size={32} className="animate-spin mb-4 text-primary" />
+                <Spinner size={32} className="mb-4 text-primary" />
                 <p className="font-medium">Chargement du document...</p>
               </div>
             )}

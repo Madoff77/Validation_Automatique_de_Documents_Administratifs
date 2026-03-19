@@ -136,7 +136,7 @@ export default function SupplierCompliance() {
 
     if (loadingSupplier)
         return (
-            <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-4">
+            <div className="p-8 max-w-6xl mx-auto animate-pulse space-y-4">
                 <div className="h-6 bg-muted rounded w-48" />
                 <div className="h-32 bg-muted rounded-xl" />
             </div>
@@ -165,7 +165,7 @@ export default function SupplierCompliance() {
         : 0;
 
     return (
-        <div className="p-8 max-w-4xl mx-auto">
+        <div className="p-8 max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-6">
                 <Link
                     to="/suppliers"

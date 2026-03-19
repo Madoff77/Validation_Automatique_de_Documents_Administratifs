@@ -10,8 +10,11 @@ import {
     Wand2,
     Upload,
     FileText,
-    Loader2,
     RefreshCw,
+    OctagonAlert,
+    Database,
+    Folder,
+    Plus
 } from "lucide-react";
 import { suppliersApi } from "@/api/suppliers";
 import { documentsApi } from "@/api/documents";
@@ -25,6 +28,14 @@ import { format } from "date-fns";
 
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 function Field({
     label,
@@ -40,14 +51,13 @@ function Field({
                 {label}
             </p>
             {editing ? (
-                <input
-                    className="input text-sm"
+                <Input
                     value={editValue ?? ""}
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={placeholder}
                 />
             ) : (
-                <p className="text-sm text-gray-900">
+                <p className="text-sm">
                     {value || (
                         <span className="text-gray-400 italic">
                             Non renseigné
@@ -159,7 +169,7 @@ export default function SupplierDetail() {
     if (isLoading)
         return (
             <div className="p-8 flex items-center gap-3 text-gray-500">
-                <Loader2 size={20} className="animate-spin" /> Chargement…
+                <Spinner size={20} /> Chargement…
             </div>
         );
 
@@ -185,7 +195,7 @@ export default function SupplierDetail() {
     );
 
     return (
-        <div className="p-8 max-w-5xl mx-auto">
+        <div className="p-8 max-w-6xl mx-auto">
             <Button variant="secondary" size="sm" className="mb-6" asChild>
                 <Link
                     to="/suppliers"
@@ -199,7 +209,7 @@ export default function SupplierDetail() {
                         <Building2 size={28} className="text-primary-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">
+                        <h1 className="text-2xl font-bold">
                             {supplier.name}
                         </h1>
                         <div className="flex items-center gap-2 mt-1">
@@ -225,10 +235,7 @@ export default function SupplierDetail() {
                                     title="Remplir automatiquement depuis les documents traités"
                                 >
                                     {autoFilling ? (
-                                        <Loader2
-                                            size={15}
-                                            className="animate-spin"
-                                        />
+                                        <Spinner size={15} />
                                     ) : (
                                         <Wand2 size={15} />
                                     )}
@@ -258,10 +265,7 @@ export default function SupplierDetail() {
                                 disabled={updateMutation.isPending}
                             >
                                 {updateMutation.isPending ? (
-                                    <Loader2
-                                        size={15}
-                                        className="animate-spin"
-                                    />
+                                    <Spinner size={15} />
                                 ) : (
                                     <Save size={15} />
                                 )}
@@ -274,94 +278,101 @@ export default function SupplierDetail() {
 
             <div className="grid grid-cols-3 gap-6">
                 <div className="col-span-2 space-y-6">
-                    <div className="card p-6">
-                        <h2 className="font-semibold text-gray-900 mb-5 flex items-center gap-2">
-                            <Building2 size={16} className="text-primary-600" />
-                            Informations fournisseur
-                            {editing && (
-                                <span className="text-xs font-normal text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full ml-auto">
-                                    Mode édition
-                                </span>
-                            )}
-                        </h2>
-                        <div className="grid grid-cols-2 gap-5">
-                            <div className="col-span-2">
+                    <Card className="gap-0 py-0 shadow-none">
+                        <CardHeader className="px-6 py-4 gap-0">
+                            <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                <Building2 size={16} className="text-primary-600" />
+                                Informations fournisseur
+                                {editing && (
+                                    <span className="text-xs font-normal text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full ml-auto">
+                                        Mode édition
+                                    </span>
+                                )}
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-6 py-4 border-t">
+                            <div className="grid grid-cols-2 gap-5">
+                                <div className="col-span-2">
+                                    <Field
+                                        label="Raison sociale"
+                                        value={supplier.name}
+                                        editValue={editForm.name}
+                                        onChange={setField("name")}
+                                        editing={editing}
+                                    />
+                                </div>
                                 <Field
-                                    label="Raison sociale"
-                                    value={supplier.name}
-                                    editValue={editForm.name}
-                                    onChange={setField("name")}
+                                    label="SIRET"
+                                    value={supplier.siret}
+                                    editValue={editForm.siret}
+                                    onChange={setField("siret")}
+                                    editing={editing}
+                                    placeholder="14 chiffres"
+                                />
+                                <Field
+                                    label="N° TVA"
+                                    value={supplier.tva_number}
+                                    editValue={editForm.tva_number}
+                                    onChange={setField("tva_number")}
+                                    editing={editing}
+                                    placeholder="FR12345678901"
+                                />
+                                <Field
+                                    label="Email"
+                                    value={supplier.email}
+                                    editValue={editForm.email}
+                                    onChange={setField("email")}
                                     editing={editing}
                                 />
-                            </div>
-                            <Field
-                                label="SIRET"
-                                value={supplier.siret}
-                                editValue={editForm.siret}
-                                onChange={setField("siret")}
-                                editing={editing}
-                                placeholder="14 chiffres"
-                            />
-                            <Field
-                                label="N° TVA"
-                                value={supplier.tva_number}
-                                editValue={editForm.tva_number}
-                                onChange={setField("tva_number")}
-                                editing={editing}
-                                placeholder="FR12345678901"
-                            />
-                            <Field
-                                label="Email"
-                                value={supplier.email}
-                                editValue={editForm.email}
-                                onChange={setField("email")}
-                                editing={editing}
-                            />
-                            <Field
-                                label="Téléphone"
-                                value={supplier.phone}
-                                editValue={editForm.phone}
-                                onChange={setField("phone")}
-                                editing={editing}
-                            />
-                            <div className="col-span-2">
                                 <Field
-                                    label="Adresse"
-                                    value={supplier.address}
-                                    editValue={editForm.address}
-                                    onChange={setField("address")}
+                                    label="Téléphone"
+                                    value={supplier.phone}
+                                    editValue={editForm.phone}
+                                    onChange={setField("phone")}
                                     editing={editing}
                                 />
+                                <div className="col-span-2">
+                                    <Field
+                                        label="Adresse"
+                                        value={supplier.address}
+                                        editValue={editForm.address}
+                                        onChange={setField("address")}
+                                        editing={editing}
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <Field
+                                        label="Notes"
+                                        value={supplier.notes}
+                                        editValue={editForm.notes}
+                                        onChange={setField("notes")}
+                                        editing={editing}
+                                    />
+                                </div>
                             </div>
-                            <div className="col-span-2">
-                                <Field
-                                    label="Notes"
-                                    value={supplier.notes}
-                                    editValue={editForm.notes}
-                                    onChange={setField("notes")}
-                                    editing={editing}
-                                />
+                        </CardContent>
+                    </Card>
+                    <Card className="gap-0 py-0 shadow-none">
+                        <CardHeader className="px-6 py-4 gap-0">
+                            <div className="flex items-center justify-between gap-3">
+                                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                    <Folder size={16} />
+                                    Documents
+                                </CardTitle>
+                                {canUpload && (
+                                    <Button variant="outline" asChild>
+                                        <Link
+                                            to={`/upload?supplier=${id}`}
+                                        >
+                                            <Plus />
+                                            Ajouter
+                                        </Link>
+                                    </Button>
+                                )}
                             </div>
-                        </div>
-                    </div>
-                    <div className="card">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                            <h2 className="font-semibold text-gray-900">
-                                Documents
-                            </h2>
-                            {canUpload && (
-                                <Button variant="outline" asChild>
-                                    <Link
-                                        to={`/upload?supplier=${id}`}
-                                        className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                                    >
-                                        + Ajouter
-                                    </Link>
-                                </Button>
-                            )}
-                        </div>
+                        </CardHeader>
                         {docs.length === 0 ? (
-                            <div className="px-6 py-12 text-center">
+                             <CardContent className="px-6 py-4 border-t">
                                 <FileText
                                     size={36}
                                     className="mx-auto text-gray-300 mb-3"
@@ -372,152 +383,167 @@ export default function SupplierDetail() {
                                 {canUpload && (
                                     <Button asChild>
                                         <Link to={`/upload?supplier=${id}`}>
-                                            <Upload size={14} /> Importer
+                                            <Upload /> Importer
                                         </Link>
                                     </Button>
                                 )}
-                            </div>
+                            </CardContent>
                         ) : (
-                            <div className="divide-y divide-gray-50">
-                                {docs.map((doc) => (
-                                    <div
-                                        key={doc.document_id}
-                                        className="flex items-center gap-3 px-6 py-3.5"
-                                    >
-                                        <DocTypeBadge type={doc.doc_type} />
-                                        <Link
-                                            to={`/documents/${doc.document_id}`}
-                                            className="flex-1 text-sm text-gray-700 hover:text-primary-600 truncate min-w-0"
+                             <CardContent className="px-6 py-4 border-t">
+                                <div className="divide-y divide-gray-50">
+                                    {docs.map((doc) => (
+                                        <div
+                                            key={doc.document_id}
+                                            className="flex items-center gap-3 px-6 py-3.5"
                                         >
-                                            {doc.original_filename}
-                                        </Link>
-                                        <DocStatusBadge status={doc.status} />
-                                        <span className="text-xs text-gray-400 whitespace-nowrap hidden lg:block">
-                                            {format(
-                                                new Date(doc.upload_timestamp),
-                                                "dd/MM/yyyy",
-                                            )}
-                                        </span>
-                                        {doc.status === "error" &&
-                                            canReprocess && (
-                                                <button
-                                                    onClick={() =>
-                                                        reprocessMutation.mutate(
-                                                            doc.document_id,
-                                                        )
-                                                    }
-                                                    className="text-gray-400 hover:text-primary-600 transition-colors"
-                                                    title="Relancer le traitement"
-                                                >
-                                                    <RefreshCw size={14} />
-                                                </button>
-                                            )}
-                                    </div>
-                                ))}
-                            </div>
+                                            <DocTypeBadge type={doc.doc_type} />
+                                            <Link
+                                                to={`/documents/${doc.document_id}`}
+                                                className="flex-1 text-sm text-gray-700 hover:text-primary-600 truncate min-w-0"
+                                            >
+                                                {doc.original_filename}
+                                            </Link>
+                                            <DocStatusBadge status={doc.status} />
+                                            <span className="text-xs text-gray-400 whitespace-nowrap hidden lg:block">
+                                                {format(
+                                                    new Date(doc.upload_timestamp),
+                                                    "dd/MM/yyyy",
+                                                )}
+                                            </span>
+                                            {doc.status === "error" &&
+                                                canReprocess && (
+                                                    <Button variant="secondary" size="icon"
+                                                        onClick={() =>
+                                                            reprocessMutation.mutate(
+                                                                doc.document_id,
+                                                            )
+                                                        }
+                                                        title="Relancer le traitement"
+                                                    >
+                                                        <RefreshCw size={14} />
+                                                    </Button>
+                                                )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
                         )}
-                    </div>
+                    </Card>
                 </div>
                 <div className="space-y-4">
-                    <div className="card p-5">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-4">
-                            Statut conformité
-                        </h3>
-                        <ComplianceBadge
-                            status={supplier.compliance_status}
-                            size="md"
-                        />
-                        <div className="mt-4 space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-500">
-                                    Docs traités
-                                </span>
-                                <span className="font-medium text-gray-900">
-                                    {processedDocs.length}
-                                </span>
+                    <Card className="gap-0 py-0 shadow-none">
+                        <CardHeader className="px-6 py-4 gap-0">
+                            <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                <OctagonAlert size={16} />
+                                Statut conformité
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-6 py-4 border-t">
+                            <ComplianceBadge
+                                status={supplier.compliance_status}
+                                size="md"
+                            />
+                            <div className="mt-4 space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-500">
+                                        Docs traités
+                                    </span>
+                                    <span className="font-medium">
+                                        {processedDocs.length}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-500">
+                                        En traitement
+                                    </span>
+                                    <span className="font-medium">
+                                        {pendingDocs.length}
+                                    </span>
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-500">
-                                    En traitement
-                                </span>
-                                <span className="font-medium text-gray-900">
-                                    {pendingDocs.length}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
                     {processedDocs.length > 0 && (
-                        <div className="card p-5">
-                            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                <Wand2 size={14} className="text-primary-600" />
-                                Données extraites
-                            </h3>
-                            <p className="text-xs text-gray-400 mb-3">
-                                Depuis {processedDocs.length} document
-                                {processedDocs.length > 1 ? "s" : ""} traité
-                                {processedDocs.length > 1 ? "s" : ""}
-                            </p>
-                            <div className="space-y-2">
-                                {supplier.siret && (
-                                    <ExtractedChip
-                                        label="SIRET"
-                                        value={supplier.siret}
-                                    />
-                                )}
-                                {supplier.tva_number && (
-                                    <ExtractedChip
-                                        label="TVA"
-                                        value={supplier.tva_number}
-                                    />
-                                )}
-                                {supplier.email && (
-                                    <ExtractedChip
-                                        label="Email"
-                                        value={supplier.email}
-                                    />
-                                )}
-                            </div>
-                            {!supplier.siret &&
-                                !supplier.tva_number &&
-                                canEditSupplier && (
-                                    <Button variant="outline"
-                                        onClick={handleAutoFill}
-                                    >
-                                        <Wand2 size={12} /> Remplir depuis les
-                                        documents
-                                    </Button>
-                                )}
-                        </div>
+                        <Card className="gap-0 py-0 shadow-none">
+                            <CardHeader className="px-6 py-4 gap-0">
+                                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                    <Wand2 size={16} className="text-primary-600" />
+                                    Données extraites
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-6 py-4 border-t">
+                                <p className="text-xs text-gray-400 mb-3">
+                                    Depuis {processedDocs.length} document
+                                    {processedDocs.length > 1 ? "s" : ""} traité
+                                    {processedDocs.length > 1 ? "s" : ""}
+                                </p>
+                                <div className="space-y-2">
+                                    {supplier.siret && (
+                                        <ExtractedChip
+                                            label="SIRET"
+                                            value={supplier.siret}
+                                        />
+                                    )}
+                                    {supplier.tva_number && (
+                                        <ExtractedChip
+                                            label="TVA"
+                                            value={supplier.tva_number}
+                                        />
+                                    )}
+                                    {supplier.email && (
+                                        <ExtractedChip
+                                            label="Email"
+                                            value={supplier.email}
+                                        />
+                                    )}
+                                </div>
+                                {!supplier.siret &&
+                                    !supplier.tva_number &&
+                                    canEditSupplier && (
+                                        <Button variant="outline"
+                                            onClick={handleAutoFill}
+                                        >
+                                            <Wand2 size={12} /> Remplir depuis les
+                                            documents
+                                        </Button>
+                                    )}
+                            </CardContent>
+                        </Card>
                     )}
-                    <div className="card p-5">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                            Métadonnées
-                        </h3>
-                        <div className="space-y-2 text-xs text-gray-500">
-                            <div>
-                                <span className="block text-gray-400">
-                                    Créé le
-                                </span>
-                                <span>
-                                    {format(
-                                        new Date(supplier.created_at),
-                                        "dd/MM/yyyy HH:mm",
-                                    )}
-                                </span>
+                    <Card className="gap-0 py-0 shadow-none">
+                        <CardHeader className="px-6 py-4 gap-0">
+                            <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                <Database size={16} className="text-primary-600" />
+                                Métadonnées
+                            </CardTitle>
+                        </CardHeader>
+                         <CardContent className="px-6 py-4 border-t">
+                            <div className="space-y-2 text-xs text-gray-500">
+                                <div>
+                                    <span className="block text-gray-400">
+                                        Créé le
+                                    </span>
+                                    <span>
+                                        {format(
+                                            new Date(supplier.created_at),
+                                            "dd/MM/yyyy HH:mm",
+                                        )}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="block text-gray-400">
+                                        Modifié le
+                                    </span>
+                                    <span>
+                                        {format(
+                                            new Date(supplier.updated_at),
+                                            "dd/MM/yyyy HH:mm",
+                                        )}
+                                    </span>
+                                </div>
                             </div>
-                            <div>
-                                <span className="block text-gray-400">
-                                    Modifié le
-                                </span>
-                                <span>
-                                    {format(
-                                        new Date(supplier.updated_at),
-                                        "dd/MM/yyyy HH:mm",
-                                    )}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>

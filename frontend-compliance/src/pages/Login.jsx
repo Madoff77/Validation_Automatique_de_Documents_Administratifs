@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
-import { Eye, EyeOff, Loader2, ScanText, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, ScanText, ArrowRight } from "lucide-react";
 
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function Login() {
     const { login } = useAuth();
@@ -133,10 +134,7 @@ export default function Login() {
                             >
                                 {loading ? (
                                     <>
-                                        <Loader2
-                                            size={15}
-                                            className="spin"
-                                        />
+                                        <Spinner size={15} />
                                         Connexion…
                                     </>
                                 ) : (

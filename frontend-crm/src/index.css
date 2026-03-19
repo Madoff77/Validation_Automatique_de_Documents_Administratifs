@@ -146,19 +146,6 @@
         @apply font-sans;
     }
 }
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-::-webkit-scrollbar-track {
-    @apply bg-secondary rounded-full;
-}
-::-webkit-scrollbar-thumb {
-    @apply bg-accent rounded-full;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.83 0.038 68);
-}
 
 @keyframes bubbleFloat {
     0% {
@@ -174,9 +161,11 @@
         transform: translateY(0px) rotate(var(--rot, 0deg));
     }
 }
+
 .bubble-float {
     animation: bubbleFloat var(--dur, 10s) ease-in-out var(--delay, 0s) infinite;
 }
+
 @keyframes formIn {
     from {
         opacity: 0;
@@ -187,18 +176,8 @@
         transform: translateX(0);
     }
 }
+
 .form-in {
     animation: formIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
     animation-delay: 0.1s;
-}
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
-}
-.spin {
-    animation: spin 1s linear infinite;
 }
