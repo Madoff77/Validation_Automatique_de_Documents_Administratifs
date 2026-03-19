@@ -30,6 +30,10 @@ fpdf2==2.7.9
 scikit-learn==1.4.2
 joblib==1.4.0
 
+# ── TrOCR (fallback OCR Transformer) ──────────────────────────
+transformers==4.41.2
+torch==2.3.0
+
 # ── Validation ────────────────────────────────────────────────
 pydantic==2.7.1
 pydantic-settings==2.2.1

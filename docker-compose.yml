@@ -242,6 +242,7 @@ services:
       - ./scripts:/app/scripts
       - ./data-generator:/app/data-generator
       - model_data:/app/models/trained
+      - hf_model_cache:/root/.cache/huggingface
     depends_on:
       mongo:
         condition: service_healthy
@@ -299,6 +300,7 @@ volumes:
   postgres_data:
   minio_data:
   model_data:
+  hf_model_cache:
 
 networks:
   docnet:

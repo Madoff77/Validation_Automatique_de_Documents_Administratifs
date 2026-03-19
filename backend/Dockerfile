@@ -19,6 +19,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pré-télécharger le modèle TrOCR pendant le build (évite tout accès réseau au runtime)
+ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
+RUN python -c "\
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel; \
+TrOCRProcessor.from_pretrained('microsoft/trocr-base-printed'); \
+VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-printed'); \
+print('TrOCR model cached.')"
+
 COPY . .
 
 RUN mkdir -p /app/models/trained
