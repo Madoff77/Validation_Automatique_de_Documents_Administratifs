@@ -29,12 +29,12 @@ Upload via API FastAPI → stockage immédiat dans la zone `raw` (MinIO). Le doc
 
 **Orchestration Airflow — 4 étapes conformes à l'architecture cible**
 
-| Étape attendue | Tâche Airflow | Statut |
-|----------------|---------------|--------|
-| Ingestion | `task_ocr` (télécharge le fichier raw) | ✅ |
-| OCR | `task_ocr` (extraction texte) | ✅ |
-| Extraction | `task_extract` + `task_classify` | ✅ |
-| Validation | `task_validate` + `task_finalize` | ✅ |
+| Étape attendue | Tâche Airflow | 
+|----------------|---------------|
+| Ingestion | `task_ocr` (télécharge le fichier raw) 
+| OCR | `task_ocr` (extraction texte) 
+| Extraction | `task_extract` + `task_classify` 
+| Validation | `task_validate` + `task_finalize` 
 
 **Data Lake — 3 zones respectées**
 
