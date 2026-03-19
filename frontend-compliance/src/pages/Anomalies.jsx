@@ -39,22 +39,23 @@ const TYPE_OPTIONS = [
 function SeverityBadge({ severity }) {
     const cfg =
         {
-            error: "bg-red-100 text-red-700 border border-red-200",
-            warning: "bg-yellow-100 text-yellow-700 border border-yellow-200",
-            info: "bg-blue-100 text-blue-600 border border-blue-200",
-        }[severity] || "bg-gray-100 text-gray-500";
+            error: "bg-destructive/15 text-destructive border border-destructive/30",
+            warning:
+                "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+            info: "bg-primary/15 text-primary border border-primary/30",
+        }[severity] || "bg-muted text-muted-foreground";
     return (
         <span
             className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${cfg}`}
         >
             {severity === "error" && (
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1" />
+                <span className="w-1.5 h-1.5 rounded-full bg-destructive mr-1" />
             )}
             {severity === "warning" && (
-                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mr-1" />
+                <span className="w-1.5 h-1.5 rounded-full bg-chart-2 mr-1" />
             )}
             {severity === "info" && (
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1" />
+                <span className="w-1.5 h-1.5 rounded-full bg-primary mr-1" />
             )}
             {severity}
         </span>
@@ -113,10 +114,10 @@ export default function Anomalies() {
         <div className="p-8 max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="font-prata text-2xl font-bold text-gray-900">
+                    <h1 className="font-prata text-2xl font-bold text-foreground">
                         Anomalies
                     </h1>
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-sm text-muted-foreground mt-0.5">
                         {anomalies.length} anomalie
                         {anomalies.length > 1 ? "s" : ""}{" "}
                         {showResolved ? "résolues" : "non résolues"}
@@ -124,24 +125,22 @@ export default function Anomalies() {
                 </div>
                 <div className="flex items-center gap-3">
                     <Button
+                        variant="outline"
                         onClick={() => refetch()}
                         className="flex items-center gap-2"
                     >
                         <RefreshCw size={14} /> Actualiser
                     </Button>
                     <Button
+                        variant={showResolved ? "outline" : "default"}
                         onClick={() => setShowResolved(!showResolved)}
-                        className={clsx(showResolved && "bg-green-50 text-green-700 border-green-200")}
                     >
                         <CheckCircle size={14} />
                         {showResolved ? "Non résolues" : "Voir résolues"}
                     </Button>
                 </div>
             </div>
-            <div className="card p-4 mb-6 flex items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Filter size={14} /> Filtres
-                </div>
+            <div className="flex flex-wrap gap-3 mb-6">
                 <Select
                     value={filters.severity || "all"}
                     onValueChange={(value) =>
@@ -151,7 +150,7 @@ export default function Anomalies() {
                         })
                     }
                 >
-                    <SelectTrigger className="w-36">
+                    <SelectTrigger className="max-w-40 w-full">
                         <SelectValue placeholder="Toutes sévérités" />
                     </SelectTrigger>
                     <SelectContent>
@@ -172,7 +171,7 @@ export default function Anomalies() {
                         })
                     }
                 >
-                    <SelectTrigger className="w-52">
+                    <SelectTrigger className="max-w-48 w-full">
                         <SelectValue placeholder="Tous types" />
                     </SelectTrigger>
                     <SelectContent>
@@ -185,12 +184,14 @@ export default function Anomalies() {
                     </SelectContent>
                 </Select>
                 {hasFilters && (
-                    <button
+                    <Button
+                        variant="secondary"
+                        size="xs"
                         onClick={clearFilters}
-                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                     >
                         <X size={12} /> Effacer
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -199,10 +200,10 @@ export default function Anomalies() {
                     {[...Array(6)].map((_, i) => (
                         <div key={i} className="card p-4 animate-pulse">
                             <div className="flex gap-3">
-                                <div className="h-5 w-16 bg-gray-200 rounded-full" />
+                                <div className="h-5 w-16 bg-muted rounded-full" />
                                 <div className="flex-1 space-y-2">
-                                    <div className="h-4 bg-gray-200 rounded-xs w-3/4" />
-                                    <div className="h-3 bg-gray-100 rounded-xs w-1/2" />
+                                    <div className="h-4 bg-muted rounded-xs w-3/4" />
+                                    <div className="h-3 bg-muted rounded-xs w-1/2" />
                                 </div>
                             </div>
                         </div>
@@ -212,15 +213,15 @@ export default function Anomalies() {
                 <div className="card py-20 text-center">
                     <CheckCircle
                         size={48}
-                        className="mx-auto text-green-400 mb-4"
+                        className="mx-auto text-primary mb-4"
                     />
-                    <p className="text-gray-500 font-medium">
+                    <p className="text-muted-foreground font-medium">
                         {showResolved
                             ? "Aucune anomalie résolue"
                             : "Aucune anomalie non résolue"}
                     </p>
                     {hasFilters && (
-                        <p className="text-sm text-gray-400 mt-1">
+                        <p className="text-sm text-muted-foreground mt-1">
                             Essayez de modifier les filtres
                         </p>
                     )}
@@ -233,14 +234,14 @@ export default function Anomalies() {
                             <div key={severity}>
                                 <div className="flex items-center gap-2 mb-3">
                                     <SeverityBadge severity={severity} />
-                                    <span className="text-xs text-gray-400">
+                                    <span className="text-xs text-muted-foreground">
                                         {grouped[severity].length} anomalie
                                         {grouped[severity].length > 1
                                             ? "s"
                                             : ""}
                                     </span>
                                 </div>
-                                <div className="card divide-y divide-gray-50">
+                                <div className="card divide-y divide-border">
                                     {grouped[severity].map((anomaly) => (
                                         <AnomalyRow
                                             key={anomaly.anomaly_id}
@@ -282,22 +283,22 @@ function AnomalyRow({ anomaly, onResolve, resolving, onViewDocument }) {
             <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <span className="text-sm font-medium text-gray-800">
+                        <span className="text-sm font-medium text-foreground">
                             {anomaly.message}
                         </span>
                         {anomaly.resolved && (
-                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+                            <span className="text-xs bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">
                                 Résolue
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-400">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         {anomaly.supplier_name && (
-                            <span className="font-medium text-gray-500">
+                            <span className="font-medium text-muted-foreground">
                                 {anomaly.supplier_name}
                             </span>
                         )}
-                        <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-sm">
+                        <span className="bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm">
                             {anomaly.type.replace(/_/g, " ")}
                         </span>
                         <span>
@@ -317,11 +318,11 @@ function AnomalyRow({ anomaly, onResolve, resolving, onViewDocument }) {
                     </div>
                     {anomaly.details &&
                         Object.keys(anomaly.details).length > 0 && (
-                            <div className="mt-2 text-xs text-gray-400 bg-gray-50 rounded-xs px-2 py-1.5 font-mono">
+                            <div className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded-xs px-2 py-1.5 font-mono">
                                 {Object.entries(anomaly.details).map(
                                     ([k, v]) => (
                                         <span key={k} className="mr-3">
-                                            <span className="text-gray-500">
+                                            <span className="text-primary">
                                                 {k}:
                                             </span>{" "}
                                             {String(v)}
@@ -335,7 +336,7 @@ function AnomalyRow({ anomaly, onResolve, resolving, onViewDocument }) {
                     {docId && (
                         <button
                             onClick={() => onViewDocument(docId)}
-                            className="text-xs text-gray-600 hover:text-gray-900 font-medium px-2 py-1 flex items-center gap-1 rounded bg-gray-100 hover:bg-gray-200"
+                            className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 flex items-center gap-1 rounded bg-muted hover:bg-accent"
                         >
                             <Eye size={14} /> Document
                         </button>
@@ -343,7 +344,7 @@ function AnomalyRow({ anomaly, onResolve, resolving, onViewDocument }) {
                     {!anomaly.resolved && canResolveAnomaly && (
                         <button
                             onClick={() => setExpanded(!expanded)}
-                            className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded-xs border border-primary-200 hover:bg-primary-50"
+                            className="text-xs text-primary hover:text-primary font-medium px-2 py-1 rounded-xs border border-primary/30 hover:bg-primary/10"
                         >
                             {expanded ? "Annuler" : "Résoudre"}
                         </button>

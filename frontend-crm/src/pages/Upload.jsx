@@ -140,9 +140,9 @@ export default function Upload() {
 
     return (
         <div className="p-8 max-w-3xl mx-auto">
-            <Button variant="ghost" className="mb-6" asChild>
+            <Button variant="secondary" size="sm" className="mb-6" asChild>
                 <Link
-                    to="/suppliers"
+                    to="/upload"
                 >
                     <ArrowLeft size={15} /> Retour
                 </Link>
@@ -161,7 +161,7 @@ export default function Upload() {
                     onValueChange={setSupplierId}
                     disabled={suppliersLoading || suppliers.length === 0}
                 >
-                    <SelectTrigger aria-invalid={!supplierId}>
+                    <SelectTrigger>
                         <SelectValue placeholder="Sélectionner un fournisseur" />
                     </SelectTrigger>
                     <SelectContent>

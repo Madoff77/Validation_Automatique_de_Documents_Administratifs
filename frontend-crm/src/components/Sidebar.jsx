@@ -25,7 +25,6 @@ export default function Sidebar() {
 
     const handleLogout = async () => {
         await logout();
-        toast.success("Déconnecté");
         navigate("/login");
     };
 

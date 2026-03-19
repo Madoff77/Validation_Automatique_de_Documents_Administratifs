@@ -1,25 +1,35 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-    Plus,
-    Search,
-    Building2,
-    ChevronRight,
-    Loader2,
-    X,
-} from "lucide-react";
+import { Plus, Search, Building2, ChevronRight, Loader2 } from "lucide-react";
 import { suppliersApi } from "../api/suppliers";
 import { ComplianceBadge } from "../components/StatusBadge";
 import { usePermissions } from "../hooks/usePermissions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
+import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 
-function CreateModal({ onClose }) {
+function CreateSupplierDialog({ canCreateSupplier }) {
     const qc = useQueryClient();
     const navigate = useNavigate();
+    const [open, setOpen] = useState(false);
     const [form, setForm] = useState({
         name: "",
         siret: "",
@@ -34,7 +44,7 @@ function CreateModal({ onClose }) {
             qc.invalidateQueries(["suppliers"]);
             toast.success(`Fournisseur ${data.name} créé`);
             navigate(`/suppliers/${data.supplier_id}`);
-            onClose();
+            setOpen(false);
         },
         onError: (e) =>
             toast.error(
@@ -45,95 +55,109 @@ function CreateModal({ onClose }) {
     const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
     return (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xs-2xl w-full max-w-md">
-                <div className="flex items-center justify-between px-6 py-4 border-b">
-                    <h2 className="font-semibold text-gray-900">
-                        Nouveau fournisseur
-                    </h2>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
-                <form
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        mutation.mutate(form);
-                    }}
-                    className="px-6 py-5 space-y-4"
-                >
-                    <div>
-                        <label className="label">Raison sociale *</label>
-                        <Input
-                            id="name"
-                            value={form.name}
-                            onChange={set("name")}
-                            required
-                            placeholder="ACME SAS"
-                        />
-                    </div>
-                    <div>
-                        <label className="label">SIRET</label>
-                        <Input
-                            id="siret"
-                            value={form.siret}
-                            onChange={set("siret")}
-                            placeholder="73282932000074"
-                            pattern="\d{14}"
-                            title="14 chiffres"
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="label">Email</label>
+        <Dialog open={open} onOpenChange={setOpen}>
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    mutation.mutate(form);
+                }}
+            >
+                <DialogTrigger asChild>
+                    <Button disabled={!canCreateSupplier}>
+                        <Plus size={16} /> Nouveau fournisseur
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Nouveau fournisseur</DialogTitle>
+                        <DialogDescription>
+                            Renseignez les informations pour créer un
+                            fournisseur.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <FieldGroup>
+                        <Field>
+                            <Label htmlFor="supplier-name">
+                                Raison sociale *
+                            </Label>
                             <Input
-                                id="email"
-                                type="email"
-                                value={form.email}
-                                onChange={set("email")}
+                                id="supplier-name"
+                                name="name"
+                                value={form.name}
+                                onChange={set("name")}
+                                required
+                                placeholder="ACME SAS"
                             />
-                        </div>
-                        <div>
-                            <label className="label">Téléphone</label>
+                        </Field>
+                        <Field>
+                            <Label htmlFor="supplier-siret">SIRET</Label>
                             <Input
-                                id="phone"
-                                value={form.phone}
-                                onChange={set("phone")}
+                                id="supplier-siret"
+                                name="siret"
+                                value={form.siret}
+                                onChange={set("siret")}
+                                placeholder="73282932000074"
+                                pattern="\d{14}"
+                                title="14 chiffres"
                             />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field>
+                                <Label htmlFor="supplier-email">Email</Label>
+                                <Input
+                                    id="supplier-email"
+                                    name="email"
+                                    type="email"
+                                    value={form.email}
+                                    onChange={set("email")}
+                                    placeholder="contact@acme.com"
+                                />
+                            </Field>
+                            <Field>
+                                <Label htmlFor="supplier-phone">
+                                    Téléphone
+                                </Label>
+                                <Input
+                                    id="supplier-phone"
+                                    name="phone"
+                                    value={form.phone}
+                                    onChange={set("phone")}
+                                    placeholder="01 23 45 67 89"
+                                />
+                            </Field>
                         </div>
-                    </div>
-                    <div>
-                        <label className="label">Adresse</label>
-                        <Input
-                            id="address"
-                            value={form.address}
-                            onChange={set("address")}
-                        />
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                        <Button variant="outline" onClick={onClose}>Annuler</Button>
-                        <Button
-                            type="submit"
-                            disabled={mutation.isPending}
-                        >
+                        <Field>
+                            <Label htmlFor="supplier-address">Adresse</Label>
+                            <Input
+                                id="supplier-address"
+                                name="address"
+                                value={form.address}
+                                onChange={set("address")}
+                                placeholder="123 Rue de Exemple, 75000 Paris"
+                            />
+                        </Field>
+                    </FieldGroup>
+                    <DialogFooter className="pt-2">
+                        <DialogClose asChild>
+                            <Button type="button" variant="outline">
+                                Annuler
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={mutation.isPending}>
                             {mutation.isPending ? (
                                 <Loader2 size={15} className="animate-spin" />
                             ) : null}
                             Créer
                         </Button>
-                    </div>
-                </form>
-            </div>
-        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </form>
+        </Dialog>
     );
 }
 
 export default function Suppliers() {
     const [search, setSearch] = useState("");
-    const [showCreate, setShowCreate] = useState(false);
     const { canCreateSupplier } = usePermissions();
 
     const { data: suppliers = [], isLoading } = useQuery({
@@ -154,22 +178,23 @@ export default function Suppliers() {
                     </p>
                 </div>
                 {canCreateSupplier && (
-                    <Button onClick={() => setShowCreate(true)}>
-                        <Plus size={16} /> Nouveau fournisseur
-                    </Button>
+                    <CreateSupplierDialog
+                        canCreateSupplier={canCreateSupplier}
+                    />
                 )}
             </div>
-            <Field className="mb-4 w-full max-w-sm">
-                <Search
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                />
-                <Input
-                    id="search"
-                    placeholder="Rechercher par nom ou SIRET…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
+            <Field className="max-w-xs w-full">
+                <InputGroup>
+                    <InputGroupAddon>
+                        <Search size={16} />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                        id="search"
+                        placeholder="Rechercher par nom ou SIRET..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </InputGroup>
             </Field>
             <div className="card divide-y divide-gray-50">
                 {isLoading ? (
@@ -234,8 +259,6 @@ export default function Suppliers() {
                     ))
                 )}
             </div>
-
-            {showCreate && <CreateModal onClose={() => setShowCreate(false)} />}
         </div>
     );
 }

@@ -7,6 +7,12 @@ import { DocStatusBadge, DocTypeBadge } from "../components/StatusBadge";
 import { usePermissions } from "../hooks/usePermissions";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput
+} from "@/components/ui/input-group";
 import {
     Select,
     SelectContent,
@@ -70,18 +76,19 @@ export default function Documents() {
                 )}
             </div>
             <div className="flex flex-wrap gap-3 mb-6">
-                <div className="relative">
-                    <Search
-                        size={15}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
-                    <input
-                        className="input pl-8 w-56 text-sm"
-                        placeholder="Rechercher…"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
+                <Field className="max-w-xs w-full">
+                    <InputGroup>
+                        <InputGroupAddon>
+                            <Search size={16} />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            id="search"
+                            placeholder="Rechercher…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </InputGroup>
+                </Field>
                 <Select
                     value={filters.doc_type || "all"}
                     onValueChange={(value) =>
@@ -91,7 +98,7 @@ export default function Documents() {
                         })
                     }
                 >
-                    <SelectTrigger className="w-44 text-sm">
+                    <SelectTrigger className="max-w-40 w-full text-sm">
                         <SelectValue placeholder="Tous les types" />
                     </SelectTrigger>
                     <SelectContent>
@@ -112,7 +119,7 @@ export default function Documents() {
                         })
                     }
                 >
-                    <SelectTrigger className="w-48 text-sm">
+                    <SelectTrigger className="max-w-40 w-full text-sm">
                         <SelectValue placeholder="Tous les statuts" />
                     </SelectTrigger>
                     <SelectContent>

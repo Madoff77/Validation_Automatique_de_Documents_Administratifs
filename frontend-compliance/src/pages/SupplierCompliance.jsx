@@ -25,49 +25,49 @@ const STATUS_CONFIG = {
     compliant: {
         label: "Conforme",
         icon: CheckCircle,
-        color: "text-green-600",
-        bg: "bg-green-50",
-        border: "border-green-200",
+        color: "text-primary",
+        bg: "bg-primary/15",
+        border: "border-primary/30",
     },
     warning: {
         label: "Avertissement",
         icon: AlertTriangle,
-        color: "text-yellow-600",
-        bg: "bg-yellow-50",
-        border: "border-yellow-200",
+        color: "text-chart-2",
+        bg: "bg-chart-2/15",
+        border: "border-chart-2/30",
     },
     non_compliant: {
         label: "Non conforme",
         icon: XCircle,
-        color: "text-red-600",
-        bg: "bg-red-50",
-        border: "border-red-200",
+        color: "text-destructive",
+        bg: "bg-destructive/15",
+        border: "border-destructive/30",
     },
     pending: {
         label: "En attente",
         icon: Clock,
-        color: "text-gray-500",
-        bg: "bg-gray-100",
-        border: "border-gray-200",
+        color: "text-muted-foreground",
+        bg: "bg-muted",
+        border: "border-border",
     },
 };
 
 function ComplianceScore({ rate }) {
     const color =
         rate >= 80
-            ? "text-green-600"
+                        ? "text-primary"
             : rate >= 50
-              ? "text-yellow-600"
-              : "text-red-600";
+                            ? "text-chart-2"
+                            : "text-destructive";
     const trackColor =
         rate >= 80
-            ? "bg-green-500"
+                        ? "bg-primary"
             : rate >= 50
-              ? "bg-yellow-500"
-              : "bg-red-500";
+                            ? "bg-chart-2"
+                            : "bg-destructive";
     return (
         <div className="flex items-center gap-3">
-            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
                     className={clsx(
                         "h-full rounded-full transition-all",
@@ -86,10 +86,10 @@ function ComplianceScore({ rate }) {
 function SeverityBadge({ severity }) {
     const cfg =
         {
-            error: "bg-red-100 text-red-700",
-            warning: "bg-yellow-100 text-yellow-700",
-            info: "bg-blue-100 text-blue-600",
-        }[severity] || "bg-gray-100 text-gray-500";
+            error: "bg-destructive/15 text-destructive",
+            warning: "bg-chart-2/15 text-chart-2",
+            info: "bg-primary/15 text-primary",
+        }[severity] || "bg-muted text-muted-foreground";
     return (
         <span
             className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-full ${cfg}`}
@@ -137,14 +137,14 @@ export default function SupplierCompliance() {
     if (loadingSupplier)
         return (
             <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-4">
-                <div className="h-6 bg-gray-200 rounded w-48" />
-                <div className="h-32 bg-gray-100 rounded-xl" />
+                <div className="h-6 bg-muted rounded w-48" />
+                <div className="h-32 bg-muted rounded-xl" />
             </div>
         );
 
     if (!supplier)
         return (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
                 Fournisseur introuvable
             </div>
         );
@@ -169,16 +169,16 @@ export default function SupplierCompliance() {
             <div className="flex items-center gap-3 mb-6">
                 <Link
                     to="/suppliers"
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
                 >
-                    <ArrowLeft size={16} className="text-gray-500" />
+                    <ArrowLeft size={16} className="text-muted-foreground" />
                 </Link>
                 <div className="flex-1">
-                    <h1 className="text-xl font-bold text-gray-900">
+                    <h1 className="text-xl font-bold text-foreground">
                         {supplier.name}
                     </h1>
                     {supplier.siret && (
-                        <p className="text-sm text-gray-500 font-mono">
+                        <p className="text-sm text-muted-foreground font-mono">
                             SIRET: {supplier.siret}
                         </p>
                     )}
@@ -197,36 +197,36 @@ export default function SupplierCompliance() {
 
             <div className="grid grid-cols-3 gap-6 mb-6">
                 <div className="col-span-1 card p-5 space-y-3">
-                    <h2 className="text-sm font-semibold text-gray-700 mb-3">
+                    <h2 className="text-sm font-semibold text-foreground mb-3">
                         Informations
                     </h2>
                     {supplier.contact_email && (
                         <div>
-                            <p className="text-xs text-gray-400">Email</p>
-                            <p className="text-sm text-gray-800">
+                            <p className="text-xs text-muted-foreground">Email</p>
+                            <p className="text-sm text-foreground">
                                 {supplier.contact_email}
                             </p>
                         </div>
                     )}
                     {supplier.contact_phone && (
                         <div>
-                            <p className="text-xs text-gray-400">Téléphone</p>
-                            <p className="text-sm text-gray-800">
+                            <p className="text-xs text-muted-foreground">Téléphone</p>
+                            <p className="text-sm text-foreground">
                                 {supplier.contact_phone}
                             </p>
                         </div>
                     )}
                     {supplier.address && (
                         <div>
-                            <p className="text-xs text-gray-400">Adresse</p>
-                            <p className="text-sm text-gray-800">
+                            <p className="text-xs text-muted-foreground">Adresse</p>
+                            <p className="text-sm text-foreground">
                                 {supplier.address}
                             </p>
                         </div>
                     )}
                     <div>
-                        <p className="text-xs text-gray-400">Membre depuis</p>
-                        <p className="text-sm text-gray-800">
+                        <p className="text-xs text-muted-foreground">Membre depuis</p>
+                        <p className="text-sm text-foreground">
                             {format(
                                 new Date(supplier.created_at),
                                 "dd MMM yyyy",
@@ -236,7 +236,7 @@ export default function SupplierCompliance() {
                     </div>
                 </div>
                 <div className="col-span-2 card p-5">
-                    <h2 className="text-sm font-semibold text-gray-700 mb-4">
+                    <h2 className="text-sm font-semibold text-foreground mb-4">
                         Métriques de conformité
                     </h2>
                     <div className="grid grid-cols-2 gap-4 mb-4">
@@ -245,37 +245,37 @@ export default function SupplierCompliance() {
                                 label: "Documents totaux",
                                 value: compliance?.total_documents ?? "—",
                                 icon: FileText,
-                                color: "text-blue-500",
+                                color: "text-primary",
                             },
                             {
                                 label: "Expirations actives",
                                 value: compliance?.expired_documents ?? "—",
                                 icon: Calendar,
-                                color: "text-red-500",
+                                color: "text-destructive",
                             },
                             {
                                 label: "Expire bientôt (30j)",
                                 value: compliance?.expiring_soon ?? "—",
                                 icon: Clock,
-                                color: "text-yellow-500",
+                                color: "text-chart-2",
                             },
                             {
                                 label: "Anomalies non résolues",
                                 value: unresolvedAnomalies.length,
                                 icon: ShieldAlert,
-                                color: "text-orange-500",
+                                color: "text-chart-3",
                             },
                         ].map(({ label, value, icon: Icon, color }) => (
                             <div
                                 key={label}
-                                className="bg-gray-50 rounded-lg p-3 flex items-center gap-3"
+                                className="bg-muted/50 rounded-lg p-3 flex items-center gap-3"
                             >
                                 <Icon size={16} className={color} />
                                 <div>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-muted-foreground">
                                         {label}
                                     </p>
-                                    <p className="text-lg font-bold text-gray-900">
+                                    <p className="text-lg font-bold text-foreground">
                                         {value}
                                     </p>
                                 </div>
@@ -285,7 +285,7 @@ export default function SupplierCompliance() {
                     {compliance?.total_documents > 0 && (
                         <div>
                             <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-muted-foreground">
                                     Taux de conformité documentaire
                                 </span>
                             </div>
@@ -295,17 +295,17 @@ export default function SupplierCompliance() {
                 </div>
             </div>
             <div className="card">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <ShieldAlert size={16} className="text-orange-500" />
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                    <h2 className="font-semibold text-foreground flex items-center gap-2">
+                        <ShieldAlert size={16} className="text-chart-3" />
                         Anomalies
                         {unresolvedAnomalies.length > 0 && (
-                            <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                            <span className="bg-destructive text-destructive-foreground text-xs font-bold px-1.5 py-0.5 rounded-full">
                                 {unresolvedAnomalies.length}
                             </span>
                         )}
                     </h2>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                         {anomalies.length} au total
                     </span>
                 </div>
@@ -315,7 +315,7 @@ export default function SupplierCompliance() {
                         {[...Array(3)].map((_, i) => (
                             <div
                                 key={i}
-                                className="h-12 bg-gray-100 rounded-lg animate-pulse"
+                                className="h-12 bg-muted rounded-lg animate-pulse"
                             />
                         ))}
                     </div>
@@ -323,16 +323,16 @@ export default function SupplierCompliance() {
                     <div className="px-6 py-12 text-center">
                         <CheckCircle
                             size={36}
-                            className="mx-auto text-green-400 mb-3"
+                            className="mx-auto text-primary mb-3"
                         />
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted-foreground">
                             Aucune anomalie pour ce fournisseur
                         </p>
                     </div>
                 ) : (
                     <div>
                         {unresolvedAnomalies.length > 0 && (
-                            <div className="divide-y divide-gray-50">
+                            <div className="divide-y divide-border">
                                 {unresolvedAnomalies.map((a) => (
                                     <AnomalyItem
                                         key={a.anomaly_id}
@@ -349,11 +349,11 @@ export default function SupplierCompliance() {
                             </div>
                         )}
                         {resolvedAnomalies.length > 0 && (
-                            <details className="border-t border-gray-100">
-                                <summary className="px-6 py-3 text-xs text-gray-400 cursor-pointer hover:text-gray-600 list-none flex items-center gap-2">
+                            <details className="border-t border-border">
+                                <summary className="px-6 py-3 text-xs text-muted-foreground cursor-pointer hover:text-foreground list-none flex items-center gap-2">
                                     <CheckCircle
                                         size={12}
-                                        className="text-green-400"
+                                        className="text-primary"
                                     />
                                     {resolvedAnomalies.length} anomalie
                                     {resolvedAnomalies.length > 1
@@ -362,7 +362,7 @@ export default function SupplierCompliance() {
                                     résolue
                                     {resolvedAnomalies.length > 1 ? "s" : ""}
                                 </summary>
-                                <div className="divide-y divide-gray-50">
+                                <div className="divide-y divide-border">
                                     {resolvedAnomalies.map((a) => (
                                         <AnomalyItem
                                             key={a.anomaly_id}
@@ -398,9 +398,9 @@ function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
             <div className="flex items-start gap-3">
                 <SeverityBadge severity={anomaly.severity} />
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800">{anomaly.message}</p>
-                    <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
-                        <span className="bg-gray-100 px-1.5 py-0.5 rounded">
+                    <p className="text-sm text-foreground">{anomaly.message}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                        <span className="bg-muted px-1.5 py-0.5 rounded">
                             {anomaly.type.replace(/_/g, " ")}
                         </span>
                         <span>
@@ -410,7 +410,7 @@ function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
                             )}
                         </span>
                         {resolved && anomaly.resolved_at && (
-                            <span className="text-green-500">
+                            <span className="text-primary">
                                 Résolue{" "}
                                 {formatDistanceToNow(
                                     new Date(anomaly.resolved_at),
@@ -421,11 +421,11 @@ function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
                     </div>
                     {anomaly.details &&
                         Object.keys(anomaly.details).length > 0 && (
-                            <div className="mt-1.5 text-xs font-mono text-gray-400 bg-gray-50 rounded px-2 py-1">
+                            <div className="mt-1.5 text-xs font-mono text-muted-foreground bg-muted rounded px-2 py-1">
                                 {Object.entries(anomaly.details).map(
                                     ([k, v]) => (
                                         <span key={k} className="mr-3">
-                                            <span className="text-gray-500">
+                                            <span className="text-primary">
                                                 {k}:
                                             </span>{" "}
                                             {String(v)}
@@ -439,7 +439,7 @@ function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
                     {docId && (
                         <button
                             onClick={() => onViewDocument(docId)}
-                            className="text-xs text-gray-600 hover:text-gray-900 font-medium px-2 py-1 flex items-center gap-1 rounded bg-gray-100 hover:bg-gray-200"
+                            className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 flex items-center gap-1 rounded bg-muted hover:bg-accent"
                         >
                             <Eye size={14} /> Doc
                         </button>
@@ -447,7 +447,7 @@ function AnomalyItem({ anomaly, onResolve, resolved, onViewDocument }) {
                     {!resolved && onResolve && (
                         <button
                             onClick={() => setExpanded(!expanded)}
-                            className="text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded border border-primary-200 hover:bg-primary-50 shrink-0"
+                            className="text-xs text-primary hover:text-primary font-medium px-2 py-1 rounded border border-primary/30 hover:bg-primary/10 shrink-0"
                         >
                             {expanded ? "Annuler" : "Résoudre"}
                         </button>

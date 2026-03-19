@@ -23,19 +23,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const COMPLIANCE_COLORS = {
-    compliant: "#22c55e",
-    warning: "#f59e0b",
-    non_compliant: "#ef4444",
-    pending: "#94a3b8",
+    compliant: "var(--primary)",
+    warning: "var(--chart-2)",
+    non_compliant: "var(--destructive)",
+    pending: "var(--muted-foreground)",
 };
 
 function StatCard({ icon: Icon, label, value, sub, color = "blue", loading }) {
     const colors = {
-        blue: "bg-blue-50 text-blue-600",
-        green: "bg-green-50 text-green-600",
-        yellow: "bg-yellow-50 text-yellow-600",
-        red: "bg-red-50 text-red-600",
-        purple: "bg-purple-50 text-purple-600",
+        blue: "bg-primary/10 text-primary",
+        green: "bg-primary/10 text-primary",
+        yellow: "bg-chart-2/10 text-chart-2",
+        red: "bg-destructive/10 text-destructive",
+        purple: "bg-chart-3/10 text-chart-3",
+        orange: "bg-chart-3/10 text-chart-3",
     };
     return (
         <Card className="py-4 gap-0 shadow-none">
@@ -44,16 +45,16 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", loading }) {
                     <Icon size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-500 font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground font-medium">{label}</p>
                     {loading ? (
-                        <div className="h-7 w-16 bg-gray-200 rounded-sm animate-pulse mt-1" />
+                        <div className="h-7 w-16 bg-muted rounded-sm animate-pulse mt-1" />
                     ) : (
                         <div className="flex gap-1 items-baseline">
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p className="text-2xl font-bold text-foreground">
                                 {value ?? "—"}
                             </p>
                             {sub && (
-                                <p className="text-xs text-gray-400 mt-0.5">
+                                <p className="text-xs text-muted-foreground mt-0.5">
                                     {sub}
                                 </p>
                             )}
@@ -68,10 +69,10 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", loading }) {
 function SeverityBadge({ severity }) {
     const cfg =
         {
-            error: "bg-red-100 text-red-700",
-            warning: "bg-yellow-100 text-yellow-700",
-            info: "bg-blue-100 text-blue-600",
-        }[severity] || "bg-gray-100 text-gray-500";
+            error: "bg-destructive/15 text-destructive",
+            warning: "bg-chart-2/15 text-chart-2",
+            info: "bg-primary/15 text-primary",
+        }[severity] || "bg-muted text-muted-foreground";
     return (
         <span
             className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full ${cfg}`}
@@ -116,18 +117,18 @@ export default function Dashboard() {
         <div className="p-8 max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h1 className="font-prata text-2xl font-bold text-gray-900">
+                    <h1 className="font-prata text-2xl font-bold text-foreground">
                         Tableau de bord
                     </h1>
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-sm text-muted-foreground mt-0.5">
                         Vue d'ensemble des risques et anomalies
                     </p>
                 </div>
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2">
+                <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-4 py-2">
                     <div
-                        className={`w-2.5 h-2.5 rounded-full ${complianceRate >= 80 ? "bg-green-500" : complianceRate >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                        className={`w-2.5 h-2.5 rounded-full ${complianceRate >= 80 ? "bg-primary" : complianceRate >= 50 ? "bg-chart-2" : "bg-destructive"}`}
                     />
-                    <span className="text-sm font-semibold text-gray-700">
+                    <span className="text-sm font-semibold text-foreground">
                         {complianceRate}% conformes
                     </span>
                 </div>
@@ -168,11 +169,11 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-3 gap-6">
                 <div className="col-span-2 card">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                        <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                        <h2 className="font-semibold text-foreground flex items-center gap-2">
                             <ShieldAlert
                                 size={16}
-                                className="text-orange-500"
+                                className="text-chart-3"
                             />
                             Anomalies non résolues
                         </h2>
@@ -184,14 +185,14 @@ export default function Dashboard() {
                         <div className="px-6 py-12 text-center">
                             <CheckCircle
                                 size={36}
-                                className="mx-auto text-green-400 mb-3"
+                                className="mx-auto text-primary mb-3"
                             />
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-muted-foreground">
                                 Aucune anomalie non résolue
                             </p>
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-50">
+                        <div className="divide-y divide-border">
                             {recentAnomalies.map((a) => (
                                 <div
                                     key={a.anomaly_id}
@@ -199,10 +200,10 @@ export default function Dashboard() {
                                 >
                                     <SeverityBadge severity={a.severity} />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-gray-800 truncate">
+                                        <p className="text-sm text-foreground truncate">
                                             {a.message}
                                         </p>
-                                        <p className="text-xs text-gray-400 mt-0.5">
+                                        <p className="text-xs text-muted-foreground mt-0.5">
                                             {a.supplier_name && (
                                                 <span className="font-medium">
                                                     {a.supplier_name} ·{" "}
@@ -214,7 +215,7 @@ export default function Dashboard() {
                                             )}
                                         </p>
                                     </div>
-                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
                                         {a.type.replace("_", " ")}
                                     </span>
                                 </div>
@@ -223,11 +224,11 @@ export default function Dashboard() {
                     )}
                 </div>
                 <div className="card p-5">
-                    <h2 className="font-semibold text-gray-900 mb-4">
+                    <h2 className="font-semibold text-foreground mb-4">
                         Conformité fournisseurs
                     </h2>
                     {suppliers.length === 0 ? (
-                        <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
+                        <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
                             Aucun fournisseur
                         </div>
                     ) : (
@@ -257,7 +258,7 @@ export default function Dashboard() {
                                     iconType="circle"
                                     iconSize={8}
                                     formatter={(v) => (
-                                        <span className="text-xs capitalize">
+                                        <span className="text-xs text-muted-foreground capitalize">
                                             {v}
                                         </span>
                                     )}
@@ -277,14 +278,15 @@ export default function Dashboard() {
                                             className="w-2 h-2 rounded-full"
                                             style={{
                                                 background:
-                                                    COMPLIANCE_COLORS[status],
+                                                    COMPLIANCE_COLORS[status] ||
+                                                    "var(--muted-foreground)",
                                             }}
                                         />
-                                        <span className="text-gray-600 capitalize">
+                                        <span className="text-muted-foreground capitalize">
                                             {status.replace("_", " ")}
                                         </span>
                                     </div>
-                                    <span className="font-semibold text-gray-800">
+                                    <span className="font-semibold text-foreground">
                                         {count}
                                     </span>
                                 </div>

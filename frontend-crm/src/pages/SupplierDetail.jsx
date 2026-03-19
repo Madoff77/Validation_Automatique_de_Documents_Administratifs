@@ -26,7 +26,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
-// ── Champ de formulaire éditable ─────────────────────────────
 function Field({
     label,
     value,
@@ -60,7 +59,6 @@ function Field({
     );
 }
 
-// ── Données extraites d'un document ─────────────────────────
 function ExtractedChip({ label, value }) {
     if (!value) return null;
     return (
@@ -111,7 +109,6 @@ export default function SupplierDetail() {
         },
     });
 
-    // ── Auto-remplissage depuis les données extraites ────────
     const handleAutoFill = () => {
         const processed = docs.filter(
             (d) => d.status === "processed" && d.doc_type,
@@ -123,7 +120,6 @@ export default function SupplierDetail() {
             return;
         }
 
-        // Récupérer les données complètes du premier doc traité de chaque type
         const promises = processed
             .slice(0, 5)
             .map((d) => documentsApi.get(d.document_id));
@@ -190,12 +186,13 @@ export default function SupplierDetail() {
 
     return (
         <div className="p-8 max-w-5xl mx-auto">
-            <Link
-                to="/suppliers"
-                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
-            >
-                <ArrowLeft size={15} /> Fournisseurs
-            </Link>
+            <Button variant="secondary" size="sm" className="mb-6" asChild>
+                <Link
+                    to="/suppliers"
+                >
+                    <ArrowLeft size={15} /> Fournisseurs
+                </Link>
+            </Button>
             <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-primary-100 rounded-xl flex items-center justify-center">
@@ -353,12 +350,14 @@ export default function SupplierDetail() {
                                 Documents
                             </h2>
                             {canUpload && (
-                                <Link
-                                    to={`/upload?supplier=${id}`}
-                                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                                >
-                                    + Ajouter
-                                </Link>
+                                <Button variant="outline" asChild>
+                                    <Link
+                                        to={`/upload?supplier=${id}`}
+                                        className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                                    >
+                                        + Ajouter
+                                    </Link>
+                                </Button>
                             )}
                         </div>
                         {docs.length === 0 ? (
