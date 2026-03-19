@@ -38,13 +38,18 @@ TESSERACT_CONFIGS = [
     r"--oem 3 --psm 3 -l fra+eng",
     # PSM 6 : bloc de texte uniforme  (bon pour formulaires/factures)
     r"--oem 3 --psm 6 -l fra+eng",
+    # PSM 4 : colonne unique de tailles variables  (bon pour PDF à une colonne)
+    r"--oem 3 --psm 4 -l fra+eng",
+    # PSM 11 : texte sparse — pas d'ordre particulier  (bon pour tampons, en-têtes)
+    r"--oem 3 --psm 11 -l fra+eng",
 ]
 
 # Seuil de confiance au-dessus duquel on arrête d'essayer d'autres configs
 EARLY_STOP_CONFIDENCE = 0.65
 
 # Seuil minimum de confiance Tesseract (0-100) pour conserver un mot
-MIN_WORD_CONFIDENCE = 20
+# 40 = on ne garde que les mots lus avec une confiance raisonnable
+MIN_WORD_CONFIDENCE = 40
 
 # Un PDF est considéré "natif" si on extrait plus de N caractères non-espaces
 NATIVE_PDF_MIN_CHARS = 50

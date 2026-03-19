@@ -171,7 +171,7 @@ def deskew(img: np.ndarray, angle: float) -> np.ndarray:
     return rotated
 
 
-def upscale_if_needed(img: np.ndarray, target_min_dim: int = 1200) -> np.ndarray:
+def upscale_if_needed(img: np.ndarray, target_min_dim: int = 1400) -> np.ndarray:
     """Upscaler si la résolution est trop faible pour Tesseract."""
     h, w = img.shape[:2]
     min_dim = min(h, w)
@@ -270,14 +270,29 @@ def morphological_cleanup(binary: np.ndarray) -> np.ndarray:
 def strategy_standard(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
     """
     Pipeline standard pour document bien scanné.
-    grayscale → deskew → upscale → Otsu threshold
+    grayscale → deskew → upscale → Otsu threshold → cleanup morpho
     """
     gray = to_gray(img)
     if quality.is_skewed:
         gray = deskew(gray, quality.skew_angle)
     gray = upscale_if_needed(gray)
     gray = remove_borders(gray)
-    return threshold_otsu(gray)
+    binary = threshold_otsu(gray)
+    return morphological_cleanup(binary)
+
+
+def strategy_adaptive_standard(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
+    """
+    Variante standard avec seuillage adaptatif au lieu d'Otsu.
+    Meilleur pour les documents avec éclairage non uniforme (ombres, plis).
+    Toujours testée en parallèle de strategy_standard.
+    """
+    gray = to_gray(img)
+    if quality.is_skewed:
+        gray = deskew(gray, quality.skew_angle)
+    gray = upscale_if_needed(gray)
+    gray = remove_borders(gray)
+    return threshold_adaptive(gray, block_size=31, C=10)
 
 
 def strategy_blurry(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
@@ -415,7 +430,9 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
     )
 
     # Candidats à tester (stratégie → fonction)
-    candidates_to_try = [("standard", strategy_standard)]
+    # strategy_adaptive_standard est toujours testée en parallèle de standard
+    # car le seuillage adaptatif surpasse Otsu sur de nombreux scans réels
+    candidates_to_try = [("standard", strategy_standard), ("adaptive_standard", strategy_adaptive_standard)]
 
     if quality.is_very_blurry:
         candidates_to_try.insert(0, ("very_blurry", strategy_very_blurry))
