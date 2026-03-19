@@ -33,9 +33,7 @@ KBIS_MAX_VALIDITY_DAYS = 90
 EXPIRATION_WARNING_DAYS = 30
 
 
-# ─────────────────────────────────────────────────────────────
 # UTILITAIRES
-# ─────────────────────────────────────────────────────────────
 
 def _check(rule: str, ok: bool, message_ok: str, message_fail: str,
            severity: str = "error", details: Optional[dict] = None) -> dict:
@@ -77,9 +75,7 @@ def _parse_iso_date(date_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION SIRET
-# ─────────────────────────────────────────────────────────────
 
 def _luhn_check_siret(siret: str) -> bool:
     """
@@ -117,9 +113,7 @@ def validate_siret_format(siret: Optional[str]) -> Tuple[bool, str]:
     return True, "SIRET valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION IBAN
-# ─────────────────────────────────────────────────────────────
 
 def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     if not iban:
@@ -138,9 +132,7 @@ def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     return True, "IBAN valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION TVA NUMÉRO
-# ─────────────────────────────────────────────────────────────
 
 def validate_tva_number(tva: Optional[str], siren: Optional[str] = None) -> Tuple[bool, str]:
     """Vérifier cohérence TVA ↔ SIREN (clé calculée)."""
@@ -162,9 +154,7 @@ def validate_tva_number(tva: Optional[str], siren: Optional[str] = None) -> Tupl
     return True, "Numéro TVA valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION COHÉRENCE TVA (HT × taux = TVA, HT + TVA = TTC)
-# ─────────────────────────────────────────────────────────────
 
 def validate_tva_coherence(
     ht: Optional[float],
@@ -201,9 +191,7 @@ def validate_tva_coherence(
     return True, "Cohérence TVA vérifiée", details
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION DATES D'EXPIRATION
-# ─────────────────────────────────────────────────────────────
 
 def validate_expiration(
     date_expiration: Optional[str],
@@ -262,9 +250,7 @@ def validate_kbis_age(
     return "ok", f"Kbis valide ({age_days} jours, limite {KBIS_MAX_VALIDITY_DAYS} jours)"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION INTER-DOCUMENTS (cohérence fournisseur)
-# ─────────────────────────────────────────────────────────────
 
 def validate_siret_consistency(
     current_doc: dict,
@@ -300,9 +286,7 @@ def validate_siret_consistency(
     return issues
 
 
-# ─────────────────────────────────────────────────────────────
 # RÈGLES PAR TYPE DE DOCUMENT
-# ─────────────────────────────────────────────────────────────
 
 def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], List[dict]]:
     """
@@ -329,7 +313,7 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
     sid = doc["supplier_id"]
     did = doc["document_id"]
 
-    # 1. SIRET — seulement si extrait par OCR
+    # 1. SIRET — vérifié si extrait, signalé absent sinon (mention légale obligatoire)
     siret = extracted.get("siret")
     if siret:
         valid_siret, msg_siret = validate_siret_format(siret)
@@ -339,6 +323,10 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
             anomalies.append(_make_anomaly(sid, did, "FORMAT_ERROR", "warning",
                                             f"Facture {doc['original_filename']} : {msg_siret}",
                                             {"siret": siret}))
+    else:
+        checks.append(_check("siret_format", False, "SIRET extrait",
+                              "SIRET absent — mention légale obligatoire non trouvée par OCR",
+                              severity="warning", details={"siret": None}))
 
     # 2. Cohérence TVA — seulement si des montants ont été extraits
     ht = extracted.get("montant_ht")
@@ -352,17 +340,18 @@ def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], 
         if not tva_ok:
             anomalies.append(_make_anomaly(sid, did, "TVA_INCOHERENCE", "warning", tva_msg, tva_details))
 
-    # 3. Présence des champs financiels clés — INFO uniquement, pas d'anomalie
-    #    (champ non extrait = limite OCR, pas un défaut du document)
-    for field_name, label in [
-        ("montant_ttc",   "Montant TTC"),
-        ("montant_ht",    "Montant HT"),
-        ("raison_sociale","Raison sociale vendeur"),
+    # 3. Présence des champs clés — warning pour les mentions légalement requises
+    #    montant_ttc et raison_sociale sont obligatoires sur une facture (art. L441-9 CGI)
+    #    montant_ht est informatif seulement
+    for field_name, label, severity in [
+        ("montant_ttc",    "Montant TTC",            "warning"),
+        ("raison_sociale", "Raison sociale vendeur", "warning"),
+        ("montant_ht",     "Montant HT",             "info"),
     ]:
         present = extracted.get(field_name) is not None
         checks.append({
             "rule": f"field_{field_name}",
-            "status": "ok" if present else "info",
+            "status": "ok" if present else severity,
             "message": f"{label} extrait" if present else f"{label} non extrait par OCR",
             "details": {"field": field_name},
         })
@@ -587,6 +576,42 @@ def _validate_siret_doc(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict]
 
 
 # ─────────────────────────────────────────────────────────────
+# PRE-CHECK LISIBILITÉ OCR
+# ─────────────────────────────────────────────────────────────
+
+# Seuil de qualité OCR en dessous duquel les résultats sont peu fiables
+OCR_QUALITY_WARNING_THRESHOLD = 0.25
+
+def _check_ocr_readability(doc: dict) -> Optional[dict]:
+    """
+    Vérifier que le document a bien été lu par l'OCR avant de valider.
+    Retourne un check d'erreur si le texte est vide, ou warning si la qualité est faible.
+    Retourne None si tout est ok.
+    """
+    ocr_text = (doc.get("ocr_text") or "").strip()
+    ocr_score = doc.get("ocr_quality_score")
+
+    if not ocr_text:
+        return _check(
+            "ocr_readable", False,
+            "Document lisible par OCR",
+            "OCR vide — document illisible, corrompu ou pipeline non terminé",
+            severity="error",
+        )
+
+    if ocr_score is not None and float(ocr_score) < OCR_QUALITY_WARNING_THRESHOLD:
+        return _check(
+            "ocr_quality", False,
+            "Qualité OCR suffisante",
+            f"Qualité OCR faible ({float(ocr_score):.0%}) — champs extraits peu fiables",
+            severity="warning",
+            details={"ocr_quality_score": ocr_score},
+        )
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────────
 # DISPATCH ET API PUBLIQUE
 # ─────────────────────────────────────────────────────────────
 
@@ -615,12 +640,20 @@ def validate_document(
     doc_type = doc.get("doc_type", "UNKNOWN")
     validator = _VALIDATORS.get(doc_type, _VALIDATORS["UNKNOWN"])
 
+    # Pre-check lisibilité OCR — bloque si le document n'a pas été lu
+    pre_checks = []
+    ocr_check = _check_ocr_readability(doc)
+    if ocr_check:
+        pre_checks.append(ocr_check)
+
     try:
         checks, anomalies = validator(doc, sibling_docs)
     except Exception as e:
         logger.error("validation_failed", doc_id=doc.get("document_id"), error=str(e))
         checks = []
         anomalies = []
+
+    checks = pre_checks + checks
 
     # Calcul statut global — "info" est informatif, n'impacte pas le statut
     statuses = [c.get("status", "ok") for c in checks if c.get("status") not in ("ok", "info")]

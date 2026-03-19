@@ -49,9 +49,7 @@ def _get_db():
     return client[settings.mongo_db]
 
 
-# ─────────────────────────────────────────────────────────────
 # TASK 1 — PREPROCESSING + OCR
-# ─────────────────────────────────────────────────────────────
 
 def task_ocr(document_id: str) -> dict:
     """
@@ -129,9 +127,7 @@ def task_ocr(document_id: str) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────
 # TASK 2 — CLASSIFICATION
-# ─────────────────────────────────────────────────────────────
 
 def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
     """Classifier le type de document."""
@@ -171,9 +167,7 @@ def task_classify(document_id: str, ocr_text: Optional[str] = None) -> dict:
     return {"document_id": document_id, "doc_type": doc_type, "confidence": confidence}
 
 
-# ─────────────────────────────────────────────────────────────
 # TASK 3 — EXTRACTION CHAMPS
-# ─────────────────────────────────────────────────────────────
 
 def task_extract(document_id: str, doc_type: Optional[str] = None, ocr_text: Optional[str] = None) -> dict:
     """Extraire les champs structurés du texte OCR."""
@@ -206,9 +200,7 @@ def task_extract(document_id: str, doc_type: Optional[str] = None, ocr_text: Opt
     return {"document_id": document_id, "extracted": extracted}
 
 
-# ─────────────────────────────────────────────────────────────
 # TASK 4 — VALIDATION
-# ─────────────────────────────────────────────────────────────
 
 def task_validate(document_id: str) -> dict:
     """Valider le document et détecter les anomalies inter-documents."""
@@ -275,9 +267,7 @@ def task_validate(document_id: str) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────
 # TASK 5 — FINALISATION (zone curated)
-# ─────────────────────────────────────────────────────────────
 
 def task_finalize(document_id: str) -> dict:
     """Stocker les données structurées finales en zone curated."""
@@ -320,9 +310,7 @@ def task_finalize(document_id: str) -> dict:
     return {"document_id": document_id, "curated_path": curated_path}
 
 
-# ─────────────────────────────────────────────────────────────
 # PIPELINE COMPLET (hors Airflow — pour tests)
-# ─────────────────────────────────────────────────────────────
 
 def run_full_pipeline(document_id: str) -> dict:
     """Exécuter le pipeline complet de façon synchrone (tests, debug)."""

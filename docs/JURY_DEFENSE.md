@@ -59,13 +59,35 @@ Algorithme en 3 phases :
 - `brightness` = moyenne des pixels
 - `noise_score` = différence entre image et version lissée
 
-**Phase 2 — Sélection de stratégie** : 7 stratégies prédéfinies couvrent les cas : standard, flou léger, très flou (unsharp mask + CLAHE), faible contraste (CLAHE agressif), scan sombre (gamma correction), surexposé (Otsu inversé), bruité (NLM denoising + Sauvola).
+**Phase 2 — Sélection de stratégie** : 8 stratégies prédéfinies couvrent les cas : standard (Otsu), adaptive standard (seuillage adaptatif, toujours testée en parallèle), flou léger, très flou (unsharp mask + CLAHE), faible contraste (CLAHE agressif), scan sombre (gamma correction), surexposé, bruité (NLM denoising + Sauvola). Toutes les stratégies candidates sont testées et scorées — on retient le meilleur résultat.
 
 **Phase 3 — Scoring et sélection** : Toutes les stratégies sont appliquées, chaque résultat Tesseract est scoré par `confiance × min(longueur/500, 1)`. On sélectionne le meilleur. Si la confiance reste < 0.4, on retente sur l'image en niveaux de gris brute.
 
-**Phase 3 — Tesseract optimisé** : 2 configurations (PSM 3 auto + PSM 6 bloc uniforme) avec early stop si confiance ≥ 0.65. Un seul appel Tesseract par config via `image_to_data` (texte + confiance extraits ensemble). L'upscale est limité à 1200px minimum pour éviter les images trop grandes (>1500px → timeout sur machines contraintes en CPU).
+**Phase 3 — Tesseract optimisé** : 4 configurations PSM testées avec early stop si confiance ≥ 0.65 :
+- PSM 3 : segmentation automatique avec détection d'orientation (défaut, généraliste)
+- PSM 6 : bloc de texte uniforme (formulaires, factures structurées)
+- PSM 4 : colonne unique à tailles de texte variables (PDF single-column)
+- PSM 11 : texte sparse sans ordre imposé (tampons, en-têtes isolés)
+
+Un seul appel Tesseract par config via `image_to_data`. L'upscale porte les images à 1400px minimum. Seuil de confiance par mot porté à 40/100 (mots mal lus ignorés).
 
 **Résultat** : Sur nos tests avec 6 types de dégradation (blur, rotation, noise, shadow, low_res, combined), le taux d'extraction correct passe de 45% (Tesseract brut) à 87% (pipeline adaptatif). Durée OCR : 20-40 secondes par document.
+
+---
+
+### Que représentent les deux scores affichés dans le CRM ?
+
+**Score "Qualité OCR" (`ocr_quality_score`)** : c'est la confiance moyenne que Tesseract a exprimée sur chaque mot lors de la lecture. Tesseract attribue un score 0-100 à chaque mot — on filtre les mots en dessous de 40/100 (trop incertains), puis on fait la moyenne et on ramène sur [0, 1]. Un score de 0.75 signifie que les mots conservés ont été lus avec 75% de confiance en moyenne. Pour les PDF natifs (texte embarqué, aucune OCR effectuée), le score est fixé à 0.98.
+
+- `>= 0.70` : lecture fiable, extraction de champs cohérente
+- `0.25 – 0.70` : lecture partielle, certains champs peuvent être manqués
+- `< 0.25` : lecture insuffisante → warning de lisibilité dans la validation
+
+**Score "Confiance classification" (`classification_confidence`)** : c'est la probabilité que le Random Forest attribue à sa classe gagnante, sur [0, 1]. La forêt de 200 arbres vote — si 160 arbres votent FACTURE sur 200, la confiance est 0.80.
+
+- `>= 0.60` : le modèle ML décide seul
+- `< 0.60` : le modèle compare avec un classifieur à mots-clés lexicaux et prend le meilleur des deux
+- `0.0` : texte vide → classé UNKNOWN
 
 ---
 
@@ -739,8 +761,8 @@ L'implémentation initiale retournait une **URL présignée MinIO** que le front
 **Solution adoptée** : le backend agit comme proxy — `GET /documents/{id}/view` récupère le fichier depuis MinIO côté serveur (`download_file()`) et le retourne en `StreamingResponse`. Le frontend charge l'URL du backend (accessible sur `localhost:8000`), qui streame le contenu.
 
 ```
-Ancien :  navigateur → URL présignée → MinIO (réseau Docker interne ❌)
-Nouveau : navigateur → backend:8000/view → MinIO (réseau Docker interne ✅)
+Ancien :  navigateur → URL présignée → MinIO (réseau Docker interne : bloqué)
+Nouveau : navigateur → backend:8000/view → MinIO (réseau Docker interne : OK)
 ```
 
 **Auth retirée sur ces endpoints** : nécessaire pour que `<iframe src="...">` et `<img src="...">` puissent charger les ressources sans injecter un header `Authorization` (les balises HTML natives ne supportent pas les headers).

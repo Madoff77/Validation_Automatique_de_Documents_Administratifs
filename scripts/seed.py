@@ -16,6 +16,8 @@ import os
 import asyncio
 import uuid
 import random
+import time
+import requests
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -24,7 +26,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from api.config import settings
 from api.auth.password import hash_password
 from storage.minio_client import ensure_buckets, upload_file
-from pipeline.processor import run_full_pipeline
 from utils.logger import configure_logging, get_logger
 
 configure_logging()
@@ -98,7 +99,7 @@ async def seed_users(db):
             "created_at": now,
             "updated_at": now,
         })
-        print(f"  ✓ {u['username']} ({u['role']})")
+        print(f"  [OK] {u['username']} ({u['role']})")
 
 
 async def seed_suppliers(db, real_companies: list) -> list:
@@ -135,7 +136,7 @@ async def seed_suppliers(db, real_companies: list) -> list:
             "created_at": now,
             "updated_at": now,
         })
-        print(f"  ✓ {company['name']} (SIRET: {siret})")
+        print(f"  [OK] {company['name']} (SIRET: {siret})")
 
     return supplier_ids
 
@@ -205,7 +206,7 @@ async def seed_documents(db, supplier_ids: list) -> list:
                 "doc_type": None,
                 "classification_confidence": None,
                 "ocr_text": text,
-                "ocr_quality_score": 0.9,
+                "ocr_quality_score": None,  # sera écrasé par task_ocr lors du pipeline
                 "extracted": {},
                 "validation": {"status": "pending", "checks": []},
                 "airflow_run_id": None,
@@ -216,27 +217,148 @@ async def seed_documents(db, supplier_ids: list) -> list:
             await db.documents.insert_one(doc)
             created.append(document_id)
             anomaly_tag = f" [{anomaly}]" if anomaly else ""
-            print(f"  ✓ {supplier_id[:20]}... — {doc_type}{anomaly_tag} ({ext})")
+            print(f"  [OK] {supplier_id[:20]}... — {doc_type}{anomaly_tag} ({ext})")
 
     return created
 
 
+# ─────────────────────────────────────────────────────────────
+# PIPELINE VIA AIRFLOW
+# ─────────────────────────────────────────────────────────────
+
+AIRFLOW_URL      = settings.airflow_url
+AIRFLOW_AUTH     = (settings.airflow_username, settings.airflow_password)
+DAG_ID           = settings.airflow_dag_id
+POLL_INTERVAL_S  = 60   # secondes entre chaque vérification de l'état
+MAX_WAIT_S       = 900  # timeout global : 15 minutes
+
+
+def _airflow_ready() -> bool:
+    """Vérifier qu'Airflow répond avant de déclencher les DAGs."""
+    try:
+        r = requests.get(f"{AIRFLOW_URL}/health", timeout=5)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _trigger_dag(document_id: str) -> str | None:
+    """Déclencher un DAG run pour un document. Retourne le dag_run_id ou None."""
+    try:
+        r = requests.post(
+            f"{AIRFLOW_URL}/api/v1/dags/{DAG_ID}/dagRuns",
+            json={"conf": {"document_id": document_id}},
+            auth=AIRFLOW_AUTH,
+            timeout=10,
+        )
+        if r.status_code in (200, 201):
+            return r.json().get("dag_run_id")
+        logger.warning("airflow_trigger_failed", document_id=document_id, status=r.status_code, body=r.text[:200])
+        return None
+    except Exception as e:
+        logger.warning("airflow_trigger_error", document_id=document_id, error=str(e))
+        return None
+
+
+def _count_dag_states(run_ids: set[str]) -> dict[str, int]:
+    """
+    Récupérer les états de tous nos DAG runs en 2 requêtes HTTP (pas une par run).
+    On interroge l'endpoint liste avec limit=200 et on filtre sur nos run_ids.
+    Retourne {success: n, running: n, failed: n, queued: n}.
+    """
+    counts = {"success": 0, "running": 0, "failed": 0, "queued": 0}
+    try:
+        r = requests.get(
+            f"{AIRFLOW_URL}/api/v1/dags/{DAG_ID}/dagRuns",
+            params={"limit": 200, "order_by": "-execution_date"},
+            auth=AIRFLOW_AUTH,
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return counts
+        for run in r.json().get("dag_runs", []):
+            if run["dag_run_id"] in run_ids:
+                state = run.get("state", "unknown")
+                if state in counts:
+                    counts[state] += 1
+    except Exception:
+        pass
+    return counts
+
+
 async def run_pipeline_on_seeds(db, document_ids: list):
-    print(f"\n── Pipeline sur {len(document_ids)} documents ──────────────")
+    print(f"\n── Pipeline Airflow sur {len(document_ids)} documents ──────────────")
+
+    # ── Vérifier qu'Airflow est disponible ───────────────────
+    print("  Vérification Airflow...", end=" ", flush=True)
+    if not _airflow_ready():
+        print("✗ Airflow non disponible")
+        print("  → Fallback : pipeline direct (sans Airflow)")
+        _run_pipeline_direct(document_ids)
+        return
+    print("✓")
+
+    # ── Déclencher un DAG run par document ───────────────────
+    print(f"  Déclenchement de {len(document_ids)} DAG runs...")
+    run_ids: set[str] = set()
+
+    for doc_id in document_ids:
+        run_id = _trigger_dag(doc_id)
+        if run_id:
+            run_ids.add(run_id)
+            print(f"  ✓ {doc_id[:8]}...")
+        else:
+            print(f"  ✗ {doc_id[:8]}... trigger échoué")
+        time.sleep(0.3)  # éviter de saturer l'API Airflow
+
+    triggered = len(run_ids)
+    print(f"\n  {triggered}/{len(document_ids)} DAG runs déclenchés")
+    print(f"  Suivi en temps réel → http://localhost:8080/dags/{DAG_ID}/grid")
+
+    if not run_ids:
+        return
+
+    # ── Polling léger : 2 requêtes HTTP par cycle (pas une par DAG) ──
+    print(f"\n  Attente de completion (vérification toutes les {POLL_INTERVAL_S}s)...")
+    elapsed = 0
+
+    while elapsed < MAX_WAIT_S:
+        counts = _count_dag_states(run_ids)
+        in_progress = counts["running"] + counts["queued"]
+        print(
+            f"  [{elapsed:>4}s]  En cours: {in_progress:>2}"
+            f"  |  Succès: {counts['success']:>2}"
+            f"  |  Échecs: {counts['failed']:>2}",
+            flush=True,
+        )
+        if in_progress == 0:
+            break
+        time.sleep(POLL_INTERVAL_S)
+        elapsed += POLL_INTERVAL_S
+    else:
+        print(f"\n  ⚠ Timeout atteint ({MAX_WAIT_S}s) — certains documents sont encore en cours")
+        counts = _count_dag_states(run_ids)
+
+    print(f"\n  Résultat final : {counts['success']} traités ✓  {counts['failed']} échecs")
+
+
+def _run_pipeline_direct(document_ids: list):
+    """Fallback sans Airflow — pipeline synchrone direct."""
+    from pipeline.processor import run_full_pipeline
     ok = err = 0
     for doc_id in document_ids:
         try:
             result = run_full_pipeline(doc_id)
             if result["success"]:
                 ok += 1
-                print(f"  ✓ {doc_id[:8]}... traité en {result.get('duration_ms', 0)}ms")
+                print(f"  [OK] {doc_id[:8]}... traité en {result.get('duration_ms', 0)}ms")
             else:
                 err += 1
-                print(f"  ⚠ {doc_id[:8]}... erreur : {result.get('error', 'inconnu')}")
+                print(f"  [WARN] {doc_id[:8]}... erreur : {result.get('error', 'inconnu')}")
         except Exception as e:
             err += 1
-            print(f"  ✗ {doc_id[:8]}... exception : {e}")
-    print(f"\n  Résultat : {ok} traités ✓  {err} erreurs")
+            print(f"  [ERR] {doc_id[:8]}... exception : {e}")
+    print(f"\n  Résultat : {ok} traités OK, {err} erreurs")
 
 
 async def main():
@@ -252,7 +374,7 @@ async def main():
     print("\nRécupération des entreprises depuis l'API SIRENE...")
     real_companies = fetch_sirene_companies(n_companies=15)
     if not real_companies:
-        print("  ✗ Impossible de récupérer les données SIRENE. Vérifiez INSEE_API_KEY.")
+        print("  [ERR] Impossible de récupérer les données SIRENE. Vérifiez INSEE_API_KEY.")
         return
     print(f"  → {len(real_companies)} entreprises récupérées")
 
@@ -272,7 +394,7 @@ async def main():
     client.close()
 
     print("\n╔══════════════════════════════════════════════════╗")
-    print("║                   Seed terminé ✓                 ║")
+    print("║                   Seed terminé OK                  ║")
     print("╠══════════════════════════════════════════════════╣")
     print(f"║  Fournisseurs : {len(supplier_ids):<33}║")
     print(f"║  Docs créés   : {len(doc_ids):<33}║")

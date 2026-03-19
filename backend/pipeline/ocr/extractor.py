@@ -38,16 +38,27 @@ TESSERACT_CONFIGS = [
     r"--oem 3 --psm 3 -l fra+eng",
     # PSM 6 : bloc de texte uniforme  (bon pour formulaires/factures)
     r"--oem 3 --psm 6 -l fra+eng",
+    # PSM 4 : colonne unique de tailles variables  (bon pour PDF à une colonne)
+    r"--oem 3 --psm 4 -l fra+eng",
+    # PSM 11 : texte sparse — pas d'ordre particulier  (bon pour tampons, en-têtes)
+    r"--oem 3 --psm 11 -l fra+eng",
 ]
 
 # Seuil de confiance au-dessus duquel on arrête d'essayer d'autres configs
 EARLY_STOP_CONFIDENCE = 0.65
 
 # Seuil minimum de confiance Tesseract (0-100) pour conserver un mot
-MIN_WORD_CONFIDENCE = 20
+# 40 = on ne garde que les mots lus avec une confiance raisonnable
+MIN_WORD_CONFIDENCE = 40
 
 # Un PDF est considéré "natif" si on extrait plus de N caractères non-espaces
 NATIVE_PDF_MIN_CHARS = 50
+
+# En-dessous de ce seuil, on abandonne Tesseract et on bascule sur TrOCR
+TROCR_FALLBACK_THRESHOLD = 0.4
+
+# Modèle TrOCR à utiliser (base = ~400MB, large = ~1.3GB)
+TROCR_MODEL_NAME = "microsoft/trocr-base-printed"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -58,7 +69,7 @@ NATIVE_PDF_MIN_CHARS = 50
 class OCRResult:
     text: str                          # Texte extrait complet
     confidence: float                  # Score moyen confiance (0-1)
-    method: str                        # "native_pdf" | "tesseract" | "tesseract_multi"
+    method: str                        # "native_pdf" | "tesseract" | "tesseract_multi" | "trocr"
     ocr_config: Optional[str]          # Config Tesseract utilisée
     page_count: int                    # Nombre de pages traitées
     word_count: int
@@ -231,6 +242,56 @@ def _clean_ocr_text(text: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────
+# TROCR FALLBACK
+# ─────────────────────────────────────────────────────────────
+
+_trocr_processor = None
+_trocr_model = None
+
+
+def _get_trocr():
+    """Chargement paresseux du modèle TrOCR (une seule fois au runtime)."""
+    global _trocr_processor, _trocr_model
+    if _trocr_processor is None:
+        try:
+            from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+            logger.info("trocr_loading", model=TROCR_MODEL_NAME)
+            _trocr_processor = TrOCRProcessor.from_pretrained(TROCR_MODEL_NAME)
+            _trocr_model = VisionEncoderDecoderModel.from_pretrained(TROCR_MODEL_NAME)
+            logger.info("trocr_loaded")
+        except Exception as e:
+            logger.error("trocr_load_failed", error=str(e))
+            return None, None
+    return _trocr_processor, _trocr_model
+
+
+def _trocr_ocr(pil_img: Image.Image) -> Tuple[str, float]:
+    """
+    Lancer TrOCR sur une image PIL.
+    Retourne (texte, confiance_estimée).
+
+    TrOCR n'expose pas de score de confiance natif — on estime la qualité
+    du résultat par la densité de texte extrait (proxy raisonnable).
+    """
+    processor, model = _get_trocr()
+    if processor is None:
+        return "", 0.0
+    try:
+        # TrOCR attend une image RGB
+        if pil_img.mode != "RGB":
+            pil_img = pil_img.convert("RGB")
+        pixel_values = processor(pil_img, return_tensors="pt").pixel_values
+        generated_ids = model.generate(pixel_values)
+        text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+        # Confiance estimée : 0.6 de base si du texte est extrait, sinon 0
+        confidence = 0.6 if len(text) > 10 else 0.0
+        return text, confidence
+    except Exception as e:
+        logger.warning("trocr_inference_failed", error=str(e))
+        return "", 0.0
+
+
+# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
 # ─────────────────────────────────────────────────────────────
 
@@ -344,14 +405,17 @@ def _ocr_multiple_images(images: List[np.ndarray], page_count: int) -> OCRResult
         # Multi-pass Tesseract
         text, conf, config = _best_tesseract_pass(preprocessed)
 
-        # Si confiance trop faible, retenter sans preprocessing (parfois contre-productif)
-        if conf < 0.4:
-            gray_raw = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-            text_raw, conf_raw, config_raw = _best_tesseract_pass(gray_raw)
-            if conf_raw > conf:
-                text, conf, config = text_raw, conf_raw, config_raw
-                preprocessing_strategy = "none_raw"
-                logger.info("raw_ocr_better", page=page_idx, conf_prep=round(conf, 2), conf_raw=round(conf_raw, 2))
+        # Si confiance trop faible, TrOCR prend le relais (modèle Transformer,
+        # plus robuste que Tesseract sur images dégradées)
+        if conf < TROCR_FALLBACK_THRESHOLD:
+            logger.info("trocr_fallback_triggered", page=page_idx, tesseract_conf=round(conf, 2))
+            pil_original = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+            text_trocr, conf_trocr = _trocr_ocr(pil_original)
+            if conf_trocr > conf:
+                text, conf = text_trocr, conf_trocr
+                config = None
+                preprocessing_strategy = "trocr"
+                logger.info("trocr_used", page=page_idx, conf=round(conf_trocr, 2), words=len(text_trocr.split()))
 
         all_texts.append(text)
         all_confidences.append(conf)
@@ -370,10 +434,11 @@ def _ocr_multiple_images(images: List[np.ndarray], page_count: int) -> OCRResult
     full_text = _clean_ocr_text(full_text)
     avg_confidence = float(np.mean(all_confidences)) if all_confidences else 0.0
 
+    trocr_used = preprocessing_strategy == "trocr"
     return OCRResult(
         text=full_text,
         confidence=avg_confidence,
-        method="tesseract_multi" if len(images) > 1 else "tesseract",
+        method="trocr" if trocr_used else ("tesseract_multi" if len(images) > 1 else "tesseract"),
         ocr_config=best_config,
         page_count=page_count,
         word_count=len(full_text.split()),

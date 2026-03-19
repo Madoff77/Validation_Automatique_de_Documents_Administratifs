@@ -49,19 +49,21 @@ _AMOUNT_PATTERN = r'([\d\s]{1,10}[,.]?\d{0,2})\s*(?:€|EUR|euros?)?'
 # NOTE : on exclut volontairement les alternatives trop permissives comme "ht\s*:?"
 # ou "prix\s+ht" (correspond aux en-têtes de colonnes "Prix Unitaire HT" dans les tableaux).
 # "\bht\s*:" (avec deux-points obligatoire) couvre les labels "HT : 200,00".
+# re.MULTILINE + gap 40 chars : couvre les factures multi-colonnes où le label
+# et le montant sont sur des lignes séparées dans le texte OCR reconstruit.
 _RE_MONTANT_HT = re.compile(
-    r'(?:total\s+ht|montant\s+ht|sous.?total\s+ht|base\s+ht|net\s+ht|\bht\s*:)[^\d]{0,20}' + _AMOUNT_PATTERN,
-    re.IGNORECASE
+    r'(?:total\s+ht|montant\s+ht|sous.?total\s+ht|base\s+ht|net\s+ht|\bht\s*:)[^\d]{0,40}' + _AMOUNT_PATTERN,
+    re.IGNORECASE | re.MULTILINE
 )
 # Contexte TTC (Toutes Taxes Comprises)
 _RE_MONTANT_TTC = re.compile(
-    r'(?:total\s+ttc|montant\s+ttc|ttc\s*:?|net\s+à\s+payer|à\s+payer\s*:?|total\s+général)[^\d]{0,20}' + _AMOUNT_PATTERN,
-    re.IGNORECASE
+    r'(?:total\s+ttc|montant\s+ttc|ttc\s*:?|net\s+à\s+payer|à\s+payer\s*:?|total\s+général)[^\d]{0,40}' + _AMOUNT_PATTERN,
+    re.IGNORECASE | re.MULTILINE
 )
 # Montant TVA (la ligne "TVA XX%" ou "dont TVA")
 _RE_MONTANT_TVA = re.compile(
-    r'(?:tva\s+(?:à\s+)?\d[\d,.]?\s*%|dont\s+tva|montant\s+tva)[^\d]{0,20}' + _AMOUNT_PATTERN,
-    re.IGNORECASE
+    r'(?:tva\s+(?:à\s+)?\d[\d,.]?\s*%|dont\s+tva|montant\s+tva)[^\d]{0,40}' + _AMOUNT_PATTERN,
+    re.IGNORECASE | re.MULTILINE
 )
 # Taux TVA
 _RE_TAUX_TVA = re.compile(
@@ -117,13 +119,14 @@ _RE_NUM_DOCUMENT = re.compile(
 )
 
 # ── IBAN / BIC ────────────────────────────────────────────────
+# [\s]{0,2} au lieu de [\s]? : tolère jusqu'à 2 espaces entre groupes
+# (Tesseract peut insérer des espaces doubles sur scans basse qualité)
 _RE_IBAN = re.compile(
-    r'\b(FR\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{2,3})\b',
+    r'\b(FR\d{2}[\s]{0,2}\d{4}[\s]{0,2}\d{4}[\s]{0,2}\d{4}[\s]{0,2}\d{4}[\s]{0,2}\d{4}[\s]{0,2}\d{2,3})\b',
     re.IGNORECASE
 )
-_RE_BIC = re.compile(
-    r'\b([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b'
-)
+# Structure BIC : 4 lettres (banque) + 2 lettres (pays) + 2 alphanum (lieu) + 3 alphanum optionnel (agence)
+_RE_BIC_STRUCT = re.compile(r'^([A-Z]{4})([A-Z]{2})([A-Z0-9]{2})([A-Z0-9]{3})?$')
 _RE_BANQUE = re.compile(
     r'(?:domiciliation|banque|établissement)\s*[:\s]\s*([A-Za-zÀ-ÿ\s\-]{3,50}?)(?:\n|$)',
     re.IGNORECASE
@@ -147,6 +150,36 @@ _RE_ADRESSE = re.compile(
 # ─────────────────────────────────────────────────────────────
 # UTILITAIRES
 # ─────────────────────────────────────────────────────────────
+
+def _normalize_numeric_ocr(text: str) -> str:
+    """
+    Corriger les confusions OCR lettres/chiffres dans les séquences numériques.
+    Appliqué uniquement sur les séquences de 8+ caractères alphanumériques contigus
+    pour éviter de corriger du texte normal (ex: "SAS" → "5A5" serait catastrophique).
+    """
+    def fix_digits(m: re.Match) -> str:
+        s = m.group(0)
+        return (s
+                .replace('O', '0').replace('o', '0')
+                .replace('l', '1').replace('I', '1')
+                .replace('B', '8')
+                .replace('S', '5')
+                .replace('Z', '2'))
+
+    return re.sub(r'[0-9OolIBSZ\s.\-]{8,}', fix_digits, text)
+
+
+def _is_valid_bic(candidate: str) -> bool:
+    """Vérifier qu'une chaîne a la structure d'un BIC (4 lettres + 2 lettres + 2 alphanum [+ 3 alphanum])."""
+    s = candidate.upper().replace(' ', '')
+    if not (8 <= len(s) <= 11):
+        return False
+    m = _RE_BIC_STRUCT.match(s)
+    if not m:
+        return False
+    bank_code, country_code = m.group(1), m.group(2)
+    return bank_code.isalpha() and country_code.isalpha()
+
 
 def _clean_number(raw: str) -> Optional[str]:
     """Normaliser un identifiant numérique : supprimer espaces/tirets/points."""
@@ -210,10 +243,13 @@ def _all_matches(pattern: re.Pattern, text: str, group: int = 1) -> List[str]:
 def _extract_siret(text: str) -> Optional[str]:
     """
     Extraire le SIRET (14 chiffres).
-    Stratégie : chercher d'abord près du mot-clé "SIRET", puis en fallback
-    n'importe quel groupe de 14 chiffres (potentiellement espacés).
+    Stratégie :
+    1. Contexte explicite "SIRET :" — prioritaire et fiable
+    2. Multi-candidats : si plusieurs séquences de 14 chiffres existent
+       (ex: SIRET fournisseur + SIRET organisme sur une attestation URSSAF),
+       on retient celle la plus proche du mot-clé "SIRET" dans le texte.
     """
-    # Priorité : contexte explicite SIRET
+    # Priorité 1 : contexte explicite SIRET
     ctx = re.search(
         r'(?:siret|n[o°]?\s*siret)\s*[:\s]?\s*(\d[\d\s.\-]{12,18}\d)',
         text, re.IGNORECASE
@@ -223,13 +259,25 @@ def _extract_siret(text: str) -> Optional[str]:
         if candidate and len(candidate) == 14:
             return candidate
 
-    # Fallback : toute séquence de 14 chiffres (avec espaces tolérés)
+    # Priorité 2 : multi-candidats scorés par proximité au mot-clé SIRET
+    keyword_positions = [m.start() for m in re.finditer(r'\bsiret\b', text, re.IGNORECASE)]
+
+    best_candidate = None
+    best_distance = float('inf')
+
     for m in _RE_SIRET.finditer(text):
         candidate = _clean_number(m.group(1))
-        if candidate and len(candidate) == 14:
-            return candidate
+        if not candidate or len(candidate) != 14:
+            continue
+        if keyword_positions:
+            dist = min(abs(m.start() - kw) for kw in keyword_positions)
+            if dist < best_distance:
+                best_distance = dist
+                best_candidate = candidate
+        elif best_candidate is None:
+            best_candidate = candidate  # aucun mot-clé → premier trouvé
 
-    return None
+    return best_candidate
 
 
 def _extract_siren(text: str, siret: Optional[str] = None) -> Optional[str]:
@@ -359,6 +407,21 @@ def _extract_numero_document(text: str, doc_type: str) -> Optional[str]:
 
 
 def _extract_iban(text: str) -> Optional[str]:
+    """
+    Extraire l'IBAN français.
+    1. Contexte explicite "IBAN :" (plus fiable)
+    2. Fallback : pattern partout dans le texte
+    """
+    # Contexte explicite — capture large puis nettoyage
+    ctx = re.search(
+        r'(?:iban|i\.b\.a\.n\.?)\s*[:\s]?\s*(FR[\d\s]{20,35})',
+        text, re.IGNORECASE
+    )
+    if ctx:
+        candidate = re.sub(r'\s', '', ctx.group(1).upper())
+        if len(candidate) == 27:
+            return candidate
+
     m = _RE_IBAN.search(text)
     if m:
         return re.sub(r'\s', '', m.group(1).upper())
@@ -366,11 +429,50 @@ def _extract_iban(text: str) -> Optional[str]:
 
 
 def _extract_bic(text: str) -> Optional[str]:
-    # Chercher d'abord dans contexte explicite
-    ctx = re.search(r'(?:bic|swift)\s*[:\s]?\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2,5})', text, re.IGNORECASE)
+    """
+    Extraire le BIC/SWIFT.
+
+    Problèmes connus sur RIBs français :
+    - Labels variés : "Code BIC", "BIC/SWIFT", "Code établissement", etc.
+    - OCR ajoute des espaces dans le BIC (ex: BNPA FRPP XXX)
+    - Aucun label explicite sur certains RIBs imprimés
+
+    Stratégie :
+    1. Contexte étendu : tous les labels courants, espaces nettoyés du candidat
+    2. Fallback par proximité IBAN : BIC et IBAN sont toujours proches sur un RIB
+    """
+    # Labels courants sur les RIBs français (ordre de fréquence décroissante)
+    ctx = re.search(
+        r'(?:'
+        r'(?:code[\s\-]?)?bic(?:[\s/]?swift)?'       # BIC, Code BIC, BIC/SWIFT
+        r'|swift(?:[\s/]?(?:code|bic))?'              # SWIFT, SWIFT/BIC, SWIFT Code
+        r'|identifiant[\s\-](?:bic|swift)'            # Identifiant BIC
+        r'|code[\s\-]établissement'                    # Code établissement
+        r')'
+        r'[\s:/]*'
+        r'([A-Za-z]{4}[\s]?[A-Za-z]{2}[\s]?[A-Za-z0-9]{2}(?:[\s]?[A-Za-z0-9]{3})?)',
+        text, re.IGNORECASE
+    )
     if ctx:
-        return ctx.group(1).upper()
-    # Fallback : pattern BIC seul (risqué hors contexte → non utilisé en fallback)
+        candidate = re.sub(r'\s', '', ctx.group(1).upper())
+        if _is_valid_bic(candidate):
+            return candidate
+
+    # Fallback : proximité IBAN (±150 caractères)
+    iban_match = _RE_IBAN.search(text)
+    if iban_match:
+        vicinity_start = max(0, iban_match.start() - 150)
+        vicinity_end = min(len(text), iban_match.end() + 150)
+        vicinity = text[vicinity_start:vicinity_end].upper()
+
+        for bic_m in re.finditer(
+            r'\b([A-Z]{4}[\s]?[A-Z]{2}[\s]?[A-Z0-9]{2}(?:[\s]?[A-Z0-9]{3})?)\b',
+            vicinity
+        ):
+            candidate = re.sub(r'\s', '', bic_m.group(1))
+            if _is_valid_bic(candidate):
+                return candidate
+
     return None
 
 
@@ -398,9 +500,16 @@ def _extract_raison_sociale(text: str) -> Optional[str]:
 
 
 def _extract_adresse(text: str) -> Optional[str]:
-    m = _RE_ADRESSE.search(text)
-    if m:
-        return re.sub(r'\s+', ' ', m.group(1)).strip()
+    """
+    Extraction informative uniquement — silencieuse en cas d'échec.
+    L'adresse n'est pas validée et n'impacte aucune règle compliance.
+    """
+    try:
+        m = _RE_ADRESSE.search(text)
+        if m:
+            return re.sub(r'\s+', ' ', m.group(1)).strip()
+    except Exception:
+        pass
     return None
 
 
@@ -561,6 +670,10 @@ def extract_fields(ocr_text: str, doc_type: str) -> dict:
     if not ocr_text or not ocr_text.strip():
         logger.warning("extract_fields_empty_text", doc_type=doc_type)
         return {}
+
+    # Corriger les confusions OCR lettres/chiffres dans les identifiants numériques
+    # (O→0, l→1, B→8, S→5, Z→2) — appliqué uniquement sur séquences longues
+    ocr_text = _normalize_numeric_ocr(ocr_text)
 
     extractor = _EXTRACTORS.get(doc_type.upper(), _extract_facture)
 

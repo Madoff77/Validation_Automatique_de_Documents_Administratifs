@@ -62,7 +62,13 @@ export default function Documents() {
                 status: filters.status || undefined,
                 limit: 100,
             }),
-        refetchInterval: 10_000,
+        refetchInterval: (data) => {
+            if (!Array.isArray(data)) return 5_000;
+            const hasInProgress = data.some(
+                (d) => !["processed", "error"].includes(d.status)
+            );
+            return hasInProgress ? 3_000 : false;
+        },
     });
 
     const filtered = search
