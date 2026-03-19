@@ -21,9 +21,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ─────────────────────────────────────────────────────────────
 # PATTERNS REGEX — compilés une fois au démarrage
-# ─────────────────────────────────────────────────────────────
 
 # SIRET : 14 chiffres, parfois espacés par groupes (3-3-3-5 ou 9-5)
 _RE_SIRET = re.compile(
@@ -41,7 +39,7 @@ _RE_TVA = re.compile(
     re.IGNORECASE
 )
 
-# ── Montants ────────────────────────────────────────────────────
+# Montants
 # Capture un nombre décimal (virgule ou point) suivi optionnellement de €
 _AMOUNT_PATTERN = r'([\d\s]{1,10}[,.]?\d{0,2})\s*(?:€|EUR|euros?)?'
 
@@ -69,7 +67,7 @@ _RE_TAUX_TVA = re.compile(
     re.IGNORECASE
 )
 
-# ── Dates ────────────────────────────────────────────────────────
+# Dates
 # Formats supportés : DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY,
 #                     YYYY-MM-DD, D MOIS YYYY, "le DD/MM/YYYY"
 _DATE_FORMATS_STR = [
@@ -102,7 +100,7 @@ _RE_DATE_EXPIRATION = re.compile(
     re.IGNORECASE
 )
 
-# ── Numéro de document ────────────────────────────────────────
+# Numéro de document
 _RE_NUM_FACTURE = re.compile(
     r'(?:facture\s*n[o°]?\s*:?|n[o°]\s*(?:de\s+)?facture\s*:?|ref[.\s]*facture\s*:?)\s*([A-Z0-9\-_/]{3,25})',
     re.IGNORECASE
@@ -116,7 +114,7 @@ _RE_NUM_DOCUMENT = re.compile(
     re.IGNORECASE
 )
 
-# ── IBAN / BIC ────────────────────────────────────────────────
+# IBAN / BIC
 _RE_IBAN = re.compile(
     r'\b(FR\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{2,3})\b',
     re.IGNORECASE
@@ -129,14 +127,14 @@ _RE_BANQUE = re.compile(
     re.IGNORECASE
 )
 
-# ── Raison sociale (heuristique sur suffixes juridiques français) ────────────
+# Raison sociale (heuristique sur suffixes juridiques français)
 _RE_RAISON_SOCIALE = re.compile(
     r'\b([A-ZÀÂÉÈÊÙÛÇ][A-Za-zÀ-ÿ\s\-&]{2,50}(?:SAS|SA|SARL|EURL|SNC|SCI|SASU|EI|EIRL|SCP|GIE|GIP|SELARL))\b'
     r'|'
     r'\b((?:SAS|SA|SARL|EURL|SNC|SCI|SASU|EI|EIRL)\s+[A-ZÀÂÉÈÊÙÛÇ][A-Za-zÀ-ÿ\s\-&]{2,50})\b'
 )
 
-# ── Adresse ───────────────────────────────────────────────────
+# Adresse
 _RE_ADRESSE = re.compile(
     r'\b(\d{1,5}[,\s]+(?:rue|avenue|boulevard|allée|impasse|chemin|route|place|'
     r'résidence|cité|domaine|voie)[,\s]+[A-Za-zÀ-ÿ\s\-,]{5,60}[,\s]+\d{5}[,\s]+[A-Za-zÀ-ÿ\s]{2,30})\b',
@@ -144,9 +142,7 @@ _RE_ADRESSE = re.compile(
 )
 
 
-# ─────────────────────────────────────────────────────────────
 # UTILITAIRES
-# ─────────────────────────────────────────────────────────────
 
 def _clean_number(raw: str) -> Optional[str]:
     """Normaliser un identifiant numérique : supprimer espaces/tirets/points."""
@@ -203,9 +199,7 @@ def _all_matches(pattern: re.Pattern, text: str, group: int = 1) -> List[str]:
     return [m.group(group).strip() for m in pattern.finditer(text) if m.group(group)]
 
 
-# ─────────────────────────────────────────────────────────────
 # EXTRACTION PAR CHAMP
-# ─────────────────────────────────────────────────────────────
 
 def _extract_siret(text: str) -> Optional[str]:
     """
@@ -404,9 +398,7 @@ def _extract_adresse(text: str) -> Optional[str]:
     return None
 
 
-# ─────────────────────────────────────────────────────────────
 # EXTRACTION PAR TYPE DE DOCUMENT
-# ─────────────────────────────────────────────────────────────
 
 def _extract_facture(text: str) -> dict:
     siret = _extract_siret(text)
@@ -536,9 +528,7 @@ def _extract_rib(text: str) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 _EXTRACTORS = {
     "FACTURE": _extract_facture,

@@ -125,12 +125,12 @@ Entraîne un **TF-IDF (1-2 grams, 8000 features) + Random Forest (200 arbres)** 
 
 | Action | viewer | operator | admin |
 |--------|:------:|:--------:|:-----:|
-| Consulter documents / fournisseurs / anomalies | ✅ | ✅ | ✅ |
-| Uploader un document | ❌ | ✅ | ✅ |
-| Créer / modifier un fournisseur | ❌ | ✅ | ✅ |
-| Résoudre une anomalie | ❌ | ✅ | ✅ |
-| Relancer le pipeline | ❌ | ✅ | ✅ |
-| Gérer les utilisateurs | ❌ | ❌ | ✅ |
+| Consulter documents / fournisseurs / anomalies | Oui | Oui | Oui |
+| Uploader un document | Non | Oui | Oui |
+| Créer / modifier un fournisseur | Non | Oui | Oui |
+| Résoudre une anomalie | Non | Oui | Oui |
+| Relancer le pipeline | Non | Oui | Oui |
+| Gérer les utilisateurs | Non | Non | Oui |
 
 ---
 

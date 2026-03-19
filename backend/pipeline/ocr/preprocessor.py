@@ -16,9 +16,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────
 # DATA CLASSES
-# ─────────────────────────────────────────────────────────────
 
 @dataclass
 class ImageQuality:
@@ -72,9 +70,7 @@ class PreprocessResult:
     all_candidates: List[Tuple[str, np.ndarray, float]] = field(default_factory=list)
 
 
-# ─────────────────────────────────────────────────────────────
 # QUALITY ASSESSMENT
-# ─────────────────────────────────────────────────────────────
 
 def assess_quality(img: np.ndarray) -> ImageQuality:
     """Évaluer la qualité d'une image (BGR ou grayscale)."""
@@ -145,9 +141,7 @@ def _estimate_skew(gray: np.ndarray) -> float:
         return 0.0
 
 
-# ─────────────────────────────────────────────────────────────
 # TRANSFORMATIONS ÉLÉMENTAIRES
-# ─────────────────────────────────────────────────────────────
 
 def to_gray(img: np.ndarray) -> np.ndarray:
     if len(img.shape) == 3:
@@ -263,9 +257,7 @@ def morphological_cleanup(binary: np.ndarray) -> np.ndarray:
     return opened
 
 
-# ─────────────────────────────────────────────────────────────
 # STRATÉGIES DE PREPROCESSING
-# ─────────────────────────────────────────────────────────────
 
 def strategy_standard(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
     """
@@ -378,9 +370,7 @@ def strategy_noisy(img: np.ndarray, quality: ImageQuality) -> np.ndarray:
     return morphological_cleanup(binary)
 
 
-# ─────────────────────────────────────────────────────────────
 # SÉLECTEUR DE STRATÉGIE
-# ─────────────────────────────────────────────────────────────
 
 def _score_preprocessed(binary: np.ndarray) -> float:
     """
@@ -486,9 +476,7 @@ def select_and_apply(img: np.ndarray) -> PreprocessResult:
     )
 
 
-# ─────────────────────────────────────────────────────────────
 # API PUBLIQUE
-# ─────────────────────────────────────────────────────────────
 
 def preprocess_image(img: np.ndarray) -> PreprocessResult:
     """

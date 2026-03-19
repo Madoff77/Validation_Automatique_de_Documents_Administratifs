@@ -11,7 +11,7 @@ from faker import Faker
 
 fake = Faker("fr_FR")
 
-# ─── Injection de la factory d'entreprise ────────────────────────────────────
+# Injection de la factory d'entreprise
 _company_factory = None
 
 
@@ -31,7 +31,7 @@ def get_company() -> dict:
     return _company_factory()
 
 
-# ─── Générateurs de données ───────────────────────────────────────────────────
+# Générateurs de données
 
 def _gen_amounts(base_min: float = 500, base_max: float = 50000) -> dict:
     ht = round(random.uniform(base_min, base_max), 2)

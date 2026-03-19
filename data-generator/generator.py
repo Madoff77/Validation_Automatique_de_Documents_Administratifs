@@ -40,7 +40,7 @@ import cv2
 import requests
 from dotenv import load_dotenv
 
-# ─── Charger .env depuis plusieurs chemins possibles ─────────────────────────
+# Charger .env depuis plusieurs chemins possibles
 for _env_path in ["../", "/app/", "./"]:
     _candidate = Path(_env_path) / ".env"
     if _candidate.exists():
@@ -59,7 +59,7 @@ if not API_KEY:
         stacklevel=2,
     )
 
-# ─── Faker (sans seed global — voir note ci-dessous) ─────────────────────────
+# Faker (sans seed global — voir note ci-dessous)
 #
 # NOTE IMPORTANTE — pourquoi on ne seed PAS ici :
 #
@@ -78,11 +78,10 @@ if not API_KEY:
 #   - Les templates ont 2-3 variantes de layout → le RF doit apprendre le contenu
 #   - train.py fixe random_state=42 uniquement pour la reproductibilité du split
 #
-# ─────────────────────────────────────────────────────────────────────────────
 
 fake = Faker("fr_FR")
 
-# ─── Importer les templates ───────────────────────────────────────────────────
+# Importer les templates
 # Ajouter le dossier courant au path pour que les templates trouvent ce module
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -97,9 +96,7 @@ from templates import (
 from templates.helpers import register_company_factory, fake as _helpers_fake
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # API SIRENE
-# ─────────────────────────────────────────────────────────────────────────────
 
 def fetch_sirene_companies(n_companies: int = 100) -> list:
     """Récupère un lot d'entreprises réelles actives via l'API SIRENE."""
@@ -157,9 +154,7 @@ def fetch_sirene_companies(n_companies: int = 100) -> list:
     return real_companies
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # HELPERS ENTREPRISE
-# ─────────────────────────────────────────────────────────────────────────────
 
 REAL_COMPANIES_POOL: list = []
 
@@ -230,9 +225,7 @@ def _gen_company() -> dict:
 register_company_factory(_gen_company)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # GÉNÉRATEURS PAR TYPE
-# ─────────────────────────────────────────────────────────────────────────────
 
 _TEXT_GENERATORS = {
     "FACTURE": lambda anomaly=None: _text_facture(anomaly=anomaly),
@@ -253,9 +246,7 @@ def generate_text(doc_type: str, anomaly: str = None) -> str:
     return gen(anomaly=anomaly)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # SIMULATION BRUIT OCR
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _degrade_text_ocr(text: str, severity: float = 0.3) -> str:
     """
@@ -330,9 +321,7 @@ def _degrade_text_ocr(text: str, severity: float = 0.3) -> str:
     return "\n".join(result_lines)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # DATASET D'ENTRAÎNEMENT
-# ─────────────────────────────────────────────────────────────────────────────
 
 def generate_training_dataset(n_per_class: int = 150) -> list:
     """
@@ -387,9 +376,7 @@ def generate_training_dataset(n_per_class: int = 150) -> list:
     return dataset
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # GÉNÉRATION PDF via fpdf2
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _text_to_pdf(text: str, title: str = "Document") -> Optional[bytes]:
     """Convertir un texte en PDF via fpdf2. Retourne None si fpdf2 absent."""
@@ -429,9 +416,7 @@ def _text_to_pdf(text: str, title: str = "Document") -> Optional[bytes]:
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # SIMULATION DE DÉGRADATION (scans mauvaise qualité)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def degrade_image(img: np.ndarray, degradation: str, severity: float = 0.5) -> np.ndarray:
     """
@@ -541,9 +526,7 @@ def text_to_image(text: str, width: int = 1240, dpi_scale: float = 1.0) -> np.nd
     return cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # GÉNÉRATION RÉELLE (entreprises SIRENE → PDFs + images)
-# ─────────────────────────────────────────────────────────────────────────────
 
 # Dégradations appliquées par type de document (réaliste)
 _DOC_DEGRADATIONS = {
@@ -641,7 +624,7 @@ def generate_documents(n_companies: int = 200, output_dir: str = "data/output") 
             created.append(meta)
             done += 1
 
-        print(f"  ✓ {company['name'][:40]:<40}  SIRET {company['siret']}  ({len(DOC_TYPES)} docs)")
+        print(f"  [OK] {company['name'][:40]:<40}  SIRET {company['siret']}  ({len(DOC_TYPES)} docs)")
 
     manifest_path = os.path.join(output_dir, "manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
@@ -652,9 +635,7 @@ def generate_documents(n_companies: int = 200, output_dir: str = "data/output") 
     return created
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # CLI
-# ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Générateur de documents synthétiques")
@@ -719,7 +700,7 @@ if __name__ == "__main__":
                 path = os.path.join(args.output, f"{doc_type.lower()}_{i+1:03d}.pdf")
                 with open(path, "wb") as f:
                     f.write(pdf_bytes)
-                print(f"  ✓ {path}")
+                print(f"  [OK] {path}")
 
     elif args.mode == "image":
         doc_type = args.doc_type or random.choice(DOC_TYPES)
@@ -731,4 +712,4 @@ if __name__ == "__main__":
                 img = degrade_image(img, args.degradation, args.severity)
             path = os.path.join(args.output, f"{doc_type.lower()}_{i+1:03d}.jpg")
             cv2.imwrite(path, img, [cv2.IMWRITE_JPEG_QUALITY, 75])
-            print(f"  ✓ {path}")
+            print(f"  [OK] {path}")
