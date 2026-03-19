@@ -270,14 +270,14 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     start_time = datetime.now()
 
-    # ── 1. Données ─────────────────────────────────────────────
+    # 1. Données
     dataset = generate_training_data(n_per_class)
     texts_raw = [t for t, _ in dataset]
     labels = [l for _, l in dataset]
 
     print(f"\n  Distribution : { {c: labels.count(c) for c in DOC_TYPES} }")
 
-    # ── 2. Préprocessing ────────────────────────────────────────
+    # 2. Préprocessing
     print(f"\n{'═'*60}")
     print("  PRÉPROCESSING TF-IDF")
     print(f"{'═'*60}")
@@ -293,15 +293,15 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     print(f"  Train : {X_train.shape[0]} exemples, {X_train.shape[1]} features")
     print(f"  Test  : {X_test.shape[0]} exemples")
 
-    # ── 3. Entraînement ─────────────────────────────────────────
+    # 3. Entraînement
     print(f"\n{'═'*60}")
     print("  ENTRAÎNEMENT — Random Forest (200 arbres)")
     print(f"{'═'*60}")
     model = train_random_forest(X_train, y_train)
     model.fit(X_train, y_train)
-    print("  Modèle entraîné ✓")
+    print("  Modèle entraîné OK")
 
-    # ── 4. Cross-validation ─────────────────────────────────────
+    # 4. Cross-validation
     print("\n  Cross-validation en cours (5 folds)...")
     cv_metrics = cross_validate(
         train_random_forest(None, None),  # factory
@@ -309,11 +309,11 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
         texts_processed, labels, cv=5
     )
 
-    # ── 5. Évaluation ───────────────────────────────────────────
+    # 5. Évaluation
     metrics = evaluate(model, vectorizer, X_test_raw, y_test, DOC_TYPES)
     print_report(metrics, cv_metrics, DOC_TYPES)
 
-    # ── 6. Top features par classe ──────────────────────────────
+    # 6. Top features par classe
     print(f"\n{'─'*60}")
     print("  TOP FEATURES PAR CLASSE (interprétabilité)")
     print(f"{'─'*60}")
@@ -327,7 +327,7 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
         color = DOC_TYPE_COLORS.get(cls, "")
         print(f"  {color}{cls:<10}{RESET}: {', '.join(top_features[:6])}")
 
-    # ── 7. Sauvegarde ───────────────────────────────────────────
+    # 7. Sauvegarde
     model_path = os.path.join(output_dir, "classifier.joblib")
     vectorizer_path = os.path.join(output_dir, "vectorizer.joblib")
     joblib.dump(model, model_path, compress=3)
@@ -370,17 +370,17 @@ def main(n_per_class: int = 150, output_dir: str = "/app/models/trained"):
     print(f"  Durée totale           : {duration:.1f}s")
     print(f"{'═'*60}\n")
 
-    # ── Verdict final ───────────────────────────────────────────
+    # Verdict final
     acc = metrics["accuracy"]
     f1 = metrics["f1_macro"]
     if acc >= 0.92 and f1 >= 0.90:
-        print(f"  ✅ Modèle EXCELLENT  (accuracy={acc:.3f}, F1={f1:.3f})")
+        print(f"  [OK] Modèle EXCELLENT  (accuracy={acc:.3f}, F1={f1:.3f})")
     elif acc >= 0.85 and f1 >= 0.82:
-        print(f"  ✅ Modèle BON        (accuracy={acc:.3f}, F1={f1:.3f})")
+        print(f"  [OK] Modèle BON        (accuracy={acc:.3f}, F1={f1:.3f})")
     elif acc >= 0.75:
-        print(f"  ⚠️  Modèle ACCEPTABLE (accuracy={acc:.3f}, F1={f1:.3f}) — augmenter n_per_class")
+        print(f"  [WARN] Modèle ACCEPTABLE (accuracy={acc:.3f}, F1={f1:.3f}) — augmenter n_per_class")
     else:
-        print(f"  ❌ Modèle INSUFFISANT (accuracy={acc:.3f}, F1={f1:.3f}) — vérifier les données")
+        print(f"  [ERR] Modèle INSUFFISANT (accuracy={acc:.3f}, F1={f1:.3f}) — vérifier les données")
 
     return report_data
 

@@ -99,7 +99,7 @@ async def seed_users(db):
             "created_at": now,
             "updated_at": now,
         })
-        print(f"  ✓ {u['username']} ({u['role']})")
+        print(f"  [OK] {u['username']} ({u['role']})")
 
 
 async def seed_suppliers(db, real_companies: list) -> list:
@@ -136,7 +136,7 @@ async def seed_suppliers(db, real_companies: list) -> list:
             "created_at": now,
             "updated_at": now,
         })
-        print(f"  ✓ {company['name']} (SIRET: {siret})")
+        print(f"  [OK] {company['name']} (SIRET: {siret})")
 
     return supplier_ids
 
@@ -217,7 +217,7 @@ async def seed_documents(db, supplier_ids: list) -> list:
             await db.documents.insert_one(doc)
             created.append(document_id)
             anomaly_tag = f" [{anomaly}]" if anomaly else ""
-            print(f"  ✓ {supplier_id[:20]}... — {doc_type}{anomaly_tag} ({ext})")
+            print(f"  [OK] {supplier_id[:20]}... — {doc_type}{anomaly_tag} ({ext})")
 
     return created
 
@@ -351,14 +351,14 @@ def _run_pipeline_direct(document_ids: list):
             result = run_full_pipeline(doc_id)
             if result["success"]:
                 ok += 1
-                print(f"  ✓ {doc_id[:8]}... traité en {result.get('duration_ms', 0)}ms")
+                print(f"  [OK] {doc_id[:8]}... traité en {result.get('duration_ms', 0)}ms")
             else:
                 err += 1
-                print(f"  ⚠ {doc_id[:8]}... erreur : {result.get('error', 'inconnu')}")
+                print(f"  [WARN] {doc_id[:8]}... erreur : {result.get('error', 'inconnu')}")
         except Exception as e:
             err += 1
-            print(f"  ✗ {doc_id[:8]}... exception : {e}")
-    print(f"\n  Résultat : {ok} traités ✓  {err} erreurs")
+            print(f"  [ERR] {doc_id[:8]}... exception : {e}")
+    print(f"\n  Résultat : {ok} traités OK, {err} erreurs")
 
 
 async def main():
@@ -374,7 +374,7 @@ async def main():
     print("\nRécupération des entreprises depuis l'API SIRENE...")
     real_companies = fetch_sirene_companies(n_companies=15)
     if not real_companies:
-        print("  ✗ Impossible de récupérer les données SIRENE. Vérifiez INSEE_API_KEY.")
+        print("  [ERR] Impossible de récupérer les données SIRENE. Vérifiez INSEE_API_KEY.")
         return
     print(f"  → {len(real_companies)} entreprises récupérées")
 
@@ -394,7 +394,7 @@ async def main():
     client.close()
 
     print("\n╔══════════════════════════════════════════════════╗")
-    print("║                   Seed terminé ✓                 ║")
+    print("║                   Seed terminé OK                  ║")
     print("╠══════════════════════════════════════════════════╣")
     print(f"║  Fournisseurs : {len(supplier_ids):<33}║")
     print(f"║  Docs créés   : {len(doc_ids):<33}║")

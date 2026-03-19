@@ -761,8 +761,8 @@ L'implémentation initiale retournait une **URL présignée MinIO** que le front
 **Solution adoptée** : le backend agit comme proxy — `GET /documents/{id}/view` récupère le fichier depuis MinIO côté serveur (`download_file()`) et le retourne en `StreamingResponse`. Le frontend charge l'URL du backend (accessible sur `localhost:8000`), qui streame le contenu.
 
 ```
-Ancien :  navigateur → URL présignée → MinIO (réseau Docker interne ❌)
-Nouveau : navigateur → backend:8000/view → MinIO (réseau Docker interne ✅)
+Ancien :  navigateur → URL présignée → MinIO (réseau Docker interne : bloqué)
+Nouveau : navigateur → backend:8000/view → MinIO (réseau Docker interne : OK)
 ```
 
 **Auth retirée sur ces endpoints** : nécessaire pour que `<iframe src="...">` et `<img src="...">` puissent charger les ressources sans injecter un header `Authorization` (les balises HTML natives ne supportent pas les headers).

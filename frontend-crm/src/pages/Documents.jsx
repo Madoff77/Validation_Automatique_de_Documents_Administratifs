@@ -220,13 +220,13 @@ export default function Documents() {
                                                 }`}
                                             >
                                                 {doc.validation_status === "ok"
-                                                    ? "✓ OK"
+                                                    ? "OK"
                                                     : doc.validation_status ===
                                                         "warning"
-                                                      ? "⚠ Alerte"
+                                                      ? "Alerte"
                                                       : doc.validation_status ===
                                                           "error"
-                                                        ? "✗ Erreur"
+                                                        ? "Erreur"
                                                         : "—"}
                                             </span>
                                         )}

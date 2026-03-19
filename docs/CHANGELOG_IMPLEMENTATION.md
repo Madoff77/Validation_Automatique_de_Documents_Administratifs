@@ -127,7 +127,7 @@ Nouvelles fonctionnalités du composant :
 | Règle | Avant | Après |
 |---|---|---|
 | SIRET absent | Check "warning" + anomalie | Aucun check (non extrait par OCR = normal) |
-| SIRET présent invalide | Warning + anomalie | Warning + anomalie ✅ conservé |
+| SIRET présent invalide | Warning + anomalie | Warning + anomalie (conservé) |
 | Montant TTC/HT manquant | Warning + anomalie | INFO uniquement, zéro anomalie |
 | Raison sociale | Non vérifiée | INFO (présent/absent) |
 | TVA cohérence | Toujours calculée | Calculée seulement si montants présents |
@@ -252,12 +252,12 @@ Le backend reste la source de vérité sécurité. Le frontend adapte l'UX sans 
 ### Matrice des permissions
 | Permission | viewer | operator | admin |
 |---|:---:|:---:|:---:|
-| canUpload | ❌ | ✅ | ✅ |
-| canCreateSupplier | ❌ | ✅ | ✅ |
-| canEditSupplier | ❌ | ✅ | ✅ |
-| canReprocess | ❌ | ✅ | ✅ |
-| canResolveAnomaly | ❌ | ✅ | ✅ |
-| isAdmin | ❌ | ❌ | ✅ |
+| canUpload | Non | Oui | Oui |
+| canCreateSupplier | Non | Oui | Oui |
+| canEditSupplier | Non | Oui | Oui |
+| canReprocess | Non | Oui | Oui |
+| canResolveAnomaly | Non | Oui | Oui |
+| isAdmin | Non | Non | Oui |
 
 ---
 
@@ -455,7 +455,7 @@ Toutes les images traitées par le preprocessor OCR étaient pivotées de 90° a
 - **`backend/pipeline/ocr/preprocessor.py`** : `if angle < -45: angle += 90` → `if angle > 45: angle -= 90`
 
 ### Impact
-- Skew détecté = 0.0° sur tous les documents horizontaux ✓
+- Skew détecté = 0.0° sur tous les documents horizontaux (OK)
 - OCR sur images restauré (avant : texte à 90° = illisible pour Tesseract)
 
 ---
@@ -469,7 +469,7 @@ Le générateur produisait des images 1240×937 (paysage) au lieu de 1240×1748 
 - **`data-generator/generator.py`** : `height = max(height, int(w * 1.41))` (ratio A4 ≈ 1.41)
 
 ### Impact
-- Toutes les images générées en portrait ✓
+- Toutes les images générées en portrait (OK)
 - OCR confidence améliorée sur les images générées
 
 ---
@@ -484,7 +484,7 @@ La génération PDF échouait silencieusement sur tous les documents : le tiret 
 - **`data-generator/generator.py`** : sanitisation du titre PDF via `title.encode('latin-1', 'replace').decode('latin-1')`
 
 ### Impact
-- Les 6 types de documents génèrent des PDF correctement ✓
+- Les 6 types de documents génèrent des PDF correctement (OK)
 - Mix 30% PDF / 70% images dégradées désormais fonctionnel
 
 ---
@@ -509,8 +509,8 @@ La génération PDF échouait silencieusement sur tous les documents : le tiret 
 - **`backend/pipeline/classification/train.py`** : ajout de `sys.path.insert(0, "/app/data-generator")` en priorité, chemin relatif conservé en fallback local
 
 ### Impact
-- F1-macro = 1.000 avec 2801 features (vs résultats dégradés avant) ✓
-- Générateur de données réalistes utilisé pour l'entraînement ✓
+- F1-macro = 1.000 avec 2801 features (vs résultats dégradés avant) (OK)
+- Générateur de données réalistes utilisé pour l'entraînement (OK)
 
 ---
 
@@ -618,8 +618,8 @@ command: >
 ```
 
 ### Impact
-- Stack complète stable sur machine 8 GiB RAM avec Postgres + Airflow + MongoDB + MinIO + API ✓
-- Webserver healthy sans redémarrage en boucle ✓
+- Stack complète stable sur machine 8 GiB RAM avec Postgres + Airflow + MongoDB + MinIO + API (OK)
+- Webserver healthy sans redémarrage en boucle (OK)
 
 ---
 
@@ -718,7 +718,7 @@ La tâche `preprocess_ocr` du DAG échouait systématiquement avec `AirflowTaskT
 |----------|-------|-------|
 | Appels Tesseract par image | 8 (4 configs × 2) | 1–2 (early stop à 0.65) |
 | Taille image traitée (1240×1748) | 1500×2110 (upscalée) | 1240×1748 (inchangée) |
-| Durée OCR estimée | ~16 min → **timeout** | ~20-40 sec ✅ |
+| Durée OCR estimée | ~16 min → **timeout** | ~20-40 sec (OK) |
 
 ### Note Makefile
 Ajout de `make reset-docs` : remet tous les documents MongoDB en statut `pending` pour faciliter les tests end-to-end Airflow sans avoir à uploader de nouveaux fichiers.
@@ -764,8 +764,8 @@ Une fois HT extrait avec une valeur incorrecte, la déduction `tva = ttc - ht` p
 | `backend/pipeline/extraction/field_extractor.py` | `_RE_MONTANT_HT` révisé + `_tva_rate_plausible()` + déduction conditionnelle |
 
 ### Impact
-- HT extrait depuis la **ligne total** et non depuis un en-tête de colonne ✓
-- TVA déduite uniquement si le taux implicite est légalement cohérent ✓
+- HT extrait depuis la **ligne total** et non depuis un en-tête de colonne (OK)
+- TVA déduite uniquement si le taux implicite est légalement cohérent (OK)
 - PDF natifs non affectés (pdfplumber préserve déjà les sauts de ligne)
 
 ---
