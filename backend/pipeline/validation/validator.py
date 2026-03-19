@@ -33,9 +33,7 @@ KBIS_MAX_VALIDITY_DAYS = 90
 EXPIRATION_WARNING_DAYS = 30
 
 
-# ─────────────────────────────────────────────────────────────
 # UTILITAIRES
-# ─────────────────────────────────────────────────────────────
 
 def _check(rule: str, ok: bool, message_ok: str, message_fail: str,
            severity: str = "error", details: Optional[dict] = None) -> dict:
@@ -77,9 +75,7 @@ def _parse_iso_date(date_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION SIRET
-# ─────────────────────────────────────────────────────────────
 
 def _luhn_check_siret(siret: str) -> bool:
     """
@@ -117,9 +113,7 @@ def validate_siret_format(siret: Optional[str]) -> Tuple[bool, str]:
     return True, "SIRET valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION IBAN
-# ─────────────────────────────────────────────────────────────
 
 def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     if not iban:
@@ -138,9 +132,7 @@ def validate_iban_format(iban: Optional[str]) -> Tuple[bool, str]:
     return True, "IBAN valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION TVA NUMÉRO
-# ─────────────────────────────────────────────────────────────
 
 def validate_tva_number(tva: Optional[str], siren: Optional[str] = None) -> Tuple[bool, str]:
     """Vérifier cohérence TVA ↔ SIREN (clé calculée)."""
@@ -162,9 +154,7 @@ def validate_tva_number(tva: Optional[str], siren: Optional[str] = None) -> Tupl
     return True, "Numéro TVA valide"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION COHÉRENCE TVA (HT × taux = TVA, HT + TVA = TTC)
-# ─────────────────────────────────────────────────────────────
 
 def validate_tva_coherence(
     ht: Optional[float],
@@ -201,9 +191,7 @@ def validate_tva_coherence(
     return True, "Cohérence TVA vérifiée", details
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION DATES D'EXPIRATION
-# ─────────────────────────────────────────────────────────────
 
 def validate_expiration(
     date_expiration: Optional[str],
@@ -262,9 +250,7 @@ def validate_kbis_age(
     return "ok", f"Kbis valide ({age_days} jours, limite {KBIS_MAX_VALIDITY_DAYS} jours)"
 
 
-# ─────────────────────────────────────────────────────────────
 # VALIDATION INTER-DOCUMENTS (cohérence fournisseur)
-# ─────────────────────────────────────────────────────────────
 
 def validate_siret_consistency(
     current_doc: dict,
@@ -300,9 +286,7 @@ def validate_siret_consistency(
     return issues
 
 
-# ─────────────────────────────────────────────────────────────
 # RÈGLES PAR TYPE DE DOCUMENT
-# ─────────────────────────────────────────────────────────────
 
 def _validate_facture(doc: dict, sibling_docs: List[dict]) -> Tuple[List[dict], List[dict]]:
     """
